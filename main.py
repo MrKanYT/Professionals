@@ -1,10 +1,16 @@
+import time
 import urllib.request
 import cv2
 import numpy as np
+import serial
 import scanner
+import multiprocessing
+from multiprocessing.managers import SharedMemoryManager
+from multiprocessing.shared_memory import ShareableList
+from multiprocessing import Value, Manager
+import ctypes
 
-
-url = 'http://192.168.137.61/cam-hi.jpg'
+url = 'http://192.168.137.130/cam-lo.jpg'
 
 yellow = ((18, 60, 100), (32, 255, 255))
 red = ((-8, 60, 100), (5, 255, 255))
@@ -39,7 +45,84 @@ def findObject(img, limits):
     return 1
 
 
-while True:
+class BTRobot:
+
+    command_interval: float
+
+    shared_memory_manager: Manager
+    shared_telemetry: ShareableList
+    shared_command: multiprocessing.Value
+    shared_reset_command: multiprocessing.Value
+
+    bt_io: multiprocessing.Process
+
+    def __init__(self, port):
+        super().__init__()
+
+        self.shared_memory_manager = Manager()
+        self.shared_command = self.shared_memory_manager.Value(ctypes.c_char_p, "")
+        self.shared_telemetry = ShareableList([0, 0, 0])
+        self.shared_reset_command = self.shared_memory_manager.Value(ctypes.c_bool, False)
+
+        self.command_interval = 0.1
+
+        self.bt_io = multiprocessing.Process(target=BTRobot.bt_connector, args=(
+            port,
+            self.command_interval,
+            self.shared_telemetry,
+            self.shared_command,
+            self.shared_reset_command))
+
+        self.bt_io.start()
+
+    @staticmethod
+    def bt_connector(port: str,
+                     command_interval: float,
+                     shared_telemetry: ShareableList,
+                     shared_command: Value,
+                     shared_reset_command: Value):
+        ser = serial.Serial(port, 9600, timeout=1)
+        last_send = 0
+        while True:
+            bdata = ser.readline()
+            data = bdata.decode().strip()
+            splitted = data[1:].split(", ")
+
+            for i in range(len(splitted)):
+                shared_telemetry[i] = int(splitted[i])
+
+            if shared_command.value:
+                t = time.time()
+                if t - last_send > command_interval:
+                    last_send = t
+                    ser.write(shared_command.value.encode("ascii"))
+                    if shared_reset_command.value:
+                        shared_command.value = ""
+                        shared_reset_command.value = False
+
+    def forward(self):
+        self.shared_command.value = "F"
+
+    def stop(self):
+        self.shared_command.value = "S"
+        self.shared_reset_command.value = True
+
+    @property
+    def telemetry(self) -> list[int]:
+        return list(self.shared_telemetry)
+
+
+if __name__ == "__main__":
+    bt_robot = BTRobot("COM11")
+    while True:
+        print(bt_robot.telemetry)
+
+'''time.sleep(5)
+bt_robot.forward()
+time.sleep(5)
+bt_robot.stop()'''
+
+'''while True:
     imgResponse = urllib.request.urlopen(url)
     imgnp = np.array(bytearray(imgResponse.read()), dtype=np.uint8)
     image = cv2.imdecode(imgnp, -1)
@@ -59,3 +142,4 @@ while True:
     if key == ord('q'): break
 
 cv2.destroyAllWindows()
+'''
