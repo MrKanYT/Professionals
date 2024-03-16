@@ -1,0 +1,4 @@
+pyserial~=3.5
+numpy~=1.26.4
+anytree~=2.12.1
+opencv-contrib-python

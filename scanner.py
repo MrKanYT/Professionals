@@ -4,11 +4,11 @@ from typing import TypeAlias
 import math
 
 COLOR_MIN = (0, 0, 0)
-COLOR_MAX = (180, 255, 30)
-MIN_CODE_RECT_AREA = 1500
+COLOR_MAX = (179, 255, 100)
+MIN_CODE_RECT_AREA = 2500
 CONTOURS_APPROX_EPSILON = 10
 BIT_CHECK_NEIGHBOURS = 2
-BIT_CHECK_THRESHOLD = 40
+BIT_CHECK_THRESHOLD = 100
 
 CODE_SIZE = 2
 
@@ -27,6 +27,7 @@ def _find_code_rect(hsv_image: cv.UMat,
 
     biggest_area = 0
     biggest = None
+    cv.drawContours(hsv_image, contours, -1, (50, 100, 100), 1)
     for cnt in contours:
         area = cv.contourArea(cnt)
         if area > biggest_area and area > min_area:
@@ -106,23 +107,29 @@ def read_code(image_hsv: cv.UMat) -> tuple[list[bool] | None, tuple[Point, Point
 
 
 def test():
-    for ind in range(1, 5):
-        img = cv.imread(f"test_images/scanner/{ind}.png")
+    for ind in range(1, 2):
+        img = cv.imread(f"test_images/scanner/real_camera_{ind}.png")
         hsv_img = cv.cvtColor(img, cv.COLOR_BGR2HSV)
 
         code_rect = _find_code_rect(hsv_img, MIN_CODE_RECT_AREA, COLOR_MIN, COLOR_MAX, CONTOURS_APPROX_EPSILON)
-        bit_positions = _get_bit_positions(code_rect, CODE_SIZE)
 
-        values = []
-        for pos in bit_positions:
-            values.append(_get_bit_value(hsv_img, pos, BIT_CHECK_NEIGHBOURS))
+        if code_rect is not None:
 
-        for i, p in enumerate(bit_positions):
-            color = (0, 255, 0) if values[i] else (0, 0, 255)
-            cv.putText(img, str(i), (p[0], p[1] - 15), cv.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
-            cv.circle(img, p, 2, color, 3)
+            bit_positions = _get_bit_positions(code_rect, CODE_SIZE)
 
-        cv.imshow(f"Test {ind}", img)
+            values = []
+            for pos in bit_positions:
+                values.append(_get_bit_value(hsv_img, pos, BIT_CHECK_NEIGHBOURS))
+
+            for i, p in enumerate(bit_positions):
+                color = (0, 255, 0) if values[i] else (0, 0, 255)
+                cv.putText(img, str(i), (p[0], p[1] - 15), cv.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+                cv.circle(img, p, 2, color, 3)
+                cv.imshow(f"Test {ind}", img)
+        else:
+            print("Code rect not found")
+            cv.imshow(f"Test {ind} (failed)", cv.cvtColor(hsv_img, cv.COLOR_HSV2BGR))
+
     cv.waitKey(0)
 
 

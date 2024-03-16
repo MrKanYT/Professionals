@@ -1,0 +1,44 @@
+{
+  "name": "root",
+  "children": [
+    {
+      "name": "qr_code",
+      "path_to": "L W40",
+      "path_from_start": "Rd180",
+      "path_from": "W25 L",
+      "path_from_stop": ""
+    },
+    {
+      "path_to": "W70",
+      "path_from_start": "Rd180",
+      "path_from": "W50",
+      "path_from_stop": "Rd180",
+      "children": [
+        {
+          "name": "cube0",
+          "path_to": "R W50",
+          "path_from_start": "Rd180",
+          "path_from": "W50 L",
+          "path_from_stop": "Rd180"
+        },
+        {
+          "name": "cube1",
+          "path_to": "F R F"
+        },
+        {
+          "path_to": "L F R F",
+          "children": [
+            {
+              "name": "cube2",
+              "path_to": "R F"
+            },
+            {
+              "name": "cube3",
+              "path_to": "F"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
