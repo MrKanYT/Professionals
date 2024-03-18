@@ -35,3 +35,33 @@ class WebCamera:
     @property
     def high_image(self) -> cv2.Mat:
         return WebCamera.get_image(self.high_quality_url)
+
+
+if __name__ == "__main__":
+    import scanner
+    print("Debug 0")
+    camera = WebCamera(
+        "http://192.168.137.31/cam-lo.jpg",
+        "http://192.168.137.31/cam-mid.jpg",
+        "http://192.168.137.31/cam-hi.jpg"
+    )
+    print("Debug 1")
+    image = camera.low_image
+    print("Debug 2")
+
+
+    image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    data, rect, bits = scanner.read_code(image_hsv)
+    print(data, rect, bits)
+
+    if None not in (data, rect, bits):
+
+        for i, point in enumerate(bits):
+            color = (0, 255, 0) if data[i] else (0, 0, 255)
+            image = cv2.circle(image, point, 2, color, 3)
+
+    cv2.imshow("Cam", image)
+
+
+    cv2.waitKey(0)

@@ -33,9 +33,9 @@ def test_distance_stop(tryings: int, robot: BTRobot, min_distance: int, max_dist
 
 def main(robot: BTRobot):
     camera = WebCamera(
-        "http://192.168.137.61/cam-lo.jpg",
-        "http://192.168.137.61/cam-mid.jpg",
-        "http://192.168.137.61/cam-hi.jpg"
+        "http://192.168.137.31/cam-lo.jpg",
+        "http://192.168.137.31/cam-mid.jpg",
+        "http://192.168.137.31/cam-hi.jpg"
     )
 
     navigator = Navigator("locations/test_loc.json")

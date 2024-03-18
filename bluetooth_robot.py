@@ -217,3 +217,7 @@ class BTRobot:
             else:
                 self.back(distance_to_wall=distance)
 
+    def rotate(self, degrees=0):
+        pass
+
+
