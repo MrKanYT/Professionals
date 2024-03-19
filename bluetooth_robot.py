@@ -2,6 +2,7 @@ import serial
 from serial.serialutil import SerialException
 
 import time
+import math
 
 import multiprocessing
 from multiprocessing.managers import SharedMemoryManager
@@ -12,56 +13,52 @@ import ctypes
 
 class BTRobot:
 
-    _command_interval: float
     _telemetry_len: int
-    _stop_path: int
-    _right_rotate_period: float
-    _left_rotate_period: float
 
     _shared_memory_manager: Manager
     _shared_telemetry: ShareableList
     _shared_command: Value
-    _shared_reset_command: Value
+    _shared_confirmations: Value
 
     _on_bluetooth_ready: Event
     _on_command_sent: Event
+    _on_command_completed: Event
     _on_releasing: Event
 
     _bt_io: multiprocessing.Process
 
     def __init__(self, port):
-        self._command_interval = 0.1
-        self._telemetry_len = 3
-        self._stop_path = 2
-        self._right_rotate_period = 3.7
-        self._left_rotate_period = 3.8
+        self._telemetry_len = 5
 
         self._shared_memory_manager = Manager()
         self._shared_telemetry = ShareableList([0] * self._telemetry_len)
         self._shared_command = self._shared_memory_manager.Value(ctypes.c_char_p, "")
-        self._shared_reset_command = self._shared_memory_manager.Value(ctypes.c_bool, False)
+        self._shared_confirmations = self._shared_memory_manager.Value(ctypes.c_uint8, 1)
 
         self._on_bluetooth_ready = Event()
         self._on_command_sent = Event()
+        self._on_command_completed = Event()
         self._on_releasing = Event()
 
         self._bt_io = multiprocessing.Process(target=BTRobot.bluetooth_io, args=(
             port,
-            self._command_interval,
             self._shared_telemetry,
             self._shared_command,
-            self._shared_reset_command,
+            self._shared_confirmations,
             self._on_bluetooth_ready,
             self._on_command_sent,
+            self._on_command_completed,
             self._on_releasing))
 
         self._bt_io.start()
 
         self._on_bluetooth_ready.wait()
+
+        #self.reset_position()
         print("Robot BT ready")
 
     def release(self):
-        self.stop()
+        self.reset_position()
         self._on_releasing.set()
 
     @property
@@ -82,12 +79,12 @@ class BTRobot:
 
     @staticmethod
     def bluetooth_io(port: str,
-                     command_interval: float,
                      shared_telemetry: ShareableList,
                      shared_command: Value,
-                     shared_reset_command: Value,
+                     shared_confirmations: Value,
                      on_bluetooth_ready: Event,
                      on_command_sent: Event,
+                     on_command_completed: Event,
                      on_releasing: Event):
         trying = 3
         while trying > 0:
@@ -103,121 +100,82 @@ class BTRobot:
             print("Failed to connect to BT")
             return
 
-        last_send = 0
-
         on_bluetooth_ready.set()
-
+        confirmations_left = shared_confirmations.value
         while ser.is_open:
             try:
                 bdata = ser.readline()
                 data = bdata.decode().strip()
-                splitted = data[1:].split(", ")
-
-                if not any(splitted):
-                    continue
-
-                bad_packet = False
-                for i in range(len(splitted)):
-                    if splitted[i].isdigit():
-                        shared_telemetry[i] = int(splitted[i])
-                    else:
-                        bad_packet = True
-                        break
-                if bad_packet:
-                    continue
+                print(f"BT >>> {data}")
+                if data == "OK":
+                    confirmations_left -= 1
+                    print(f"BT CONFIRMED >>> {confirmations_left} LEFT")
+                    if confirmations_left <= 0:
+                        on_command_completed.set()
+                        shared_confirmations.value = 1
+                else:
+                    splitted = data[1:].split(" ")
+                    if any(splitted):
+                        for i in range(len(splitted)):
+                            if splitted[i].isdigit():
+                                shared_telemetry[i] = int(splitted[i])
+                            else:
+                                break
 
                 if on_releasing.is_set():
                     break
 
                 if shared_command.value:
-                    t = time.time()
-                    if on_command_sent.is_set() or t - last_send > command_interval:
-                        last_send = t
-                        ser.write(shared_command.value.encode("ascii"))
-                        if shared_reset_command.value:
-                            shared_command.value = ""
-                            shared_reset_command.value = False
-
-                        on_command_sent.set()
+                    print(f"SEND BT >>> {shared_command.value}")
+                    ser.write(shared_command.value.encode("ascii"))
+                    print(f"SET CONFIRMATIONS: {shared_confirmations.value}")
+                    confirmations_left = shared_confirmations.value
+                    shared_command.value = ""
+                    on_command_sent.set()
             except KeyboardInterrupt:
                 break
 
         ser.close()
 
-    def send_command(self, command: str, send_once: bool = False, wait: bool = True):
+    def send_command(self, command: str, await_sending: bool = True, await_completion: bool = False, await_completion_timeout: float = 10, required_confirmations: int = 1):
         self._on_command_sent.clear()
-        self._shared_reset_command.value = send_once
+        self._on_command_completed.clear()
+        self._shared_confirmations.value = required_confirmations
         self._shared_command.value = command
 
-        if wait:
+        if await_sending and not await_completion:
             self._on_command_sent.wait()
 
-    def wait_for_forward_distance(self, distance: int, inversed: bool = False):
-        anti_noise = 3
-        while True:
-            if (not inversed and self.forward_distance <= distance) or (inversed and self.forward_distance >= distance):
-                anti_noise -= 1
-                if anti_noise <= 0:
-                    return
-            else:
-                anti_noise = 3
+        if await_completion:
+            self._on_command_completed.wait(timeout=await_completion_timeout)
 
-    def forward(self, *args, distance_to_wall: int = 0):
-        self.send_command("f")
+    def go(self, distance: int, distance_to_wall: int = 0):
+        self.send_command(f"F{distance * 10}", await_completion=True, required_confirmations=2)
 
-        if distance_to_wall <= 0:
-            return
+    def rotate(self, degrees: int):
 
-        stop_distance = distance_to_wall + self._stop_path
-        self.wait_for_forward_distance(stop_distance)
+        if abs(degrees) == 90:
+            degrees = math.copysign(101, degrees)
 
-        self.stop()
+        if abs(degrees) == 180:
+            degrees = math.copysign(185, degrees)
 
-    def back(self, *args, distance_to_wall: int = 0):
-        self.send_command("B")
+        self.send_command(f"R{degrees}", await_completion=True, required_confirmations=2)
 
-        if distance_to_wall <= 0:
-            return
+    def reset_position(self):
+        self.send_command("N")
 
-        stop_distance = distance_to_wall - self._stop_path
-        self.wait_for_forward_distance(stop_distance, True)
+    def take_item(self):
+        self.send_command("H0", await_completion=True)
 
-        self.stop()
-
-    def stop(self):
-        self.send_command("s", send_once=True)
-
-    def left(self, degrees: int = 0):
-        self.send_command("l")
-
-        if degrees == 0:
-            return
-
-        t = self._left_rotate_period * (degrees / 360)
-        time.sleep(t)
-
-        self.stop()
-
-    def right(self, degrees: int = 0):
-        self.send_command("r")
-
-        if degrees == 0:
-            return
-
-        t = self._right_rotate_period * (degrees / 360)
-        time.sleep(t)
-
-        self.stop()
-
-    def stab_forward_distance(self, distance: int, max_error: int = 3):
-
-        while abs(self.forward_distance - distance) > max_error:
-            if self.forward_distance > distance:
-                self.forward(distance_to_wall=distance)
-            else:
-                self.back(distance_to_wall=distance)
-
-    def rotate(self, degrees=0):
-        pass
+    def drop_item(self):
+        self.send_command("H2", await_completion=True)
 
 
+if __name__ == "__main__":
+    robot = BTRobot("COM10")
+
+    for i in range(8):
+        robot.rotate(180)
+
+    robot.release()

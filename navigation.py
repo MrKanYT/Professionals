@@ -101,14 +101,8 @@ class Navigator:
                 if c:
                     result.append(c)
 
-        if any(upwards):
-            add(upwards[0].path_from_start)
-
         for wp in upwards:
             add(wp.path_from)
-
-        if any(upwards):
-            add(upwards[-1].path_from_stop)
 
         for wp in downwards:
             add(wp.path_to)
@@ -118,6 +112,9 @@ class Navigator:
 
 if __name__ == "__main__":
     navigator = Navigator("locations/test_loc.json")
-    print(navigator.find_path("cube0"))
-    navigator.set_current_waypoint("cube0")
     print(navigator.find_path("qr_code"))
+    navigator.set_current_waypoint("qr_code")
+    print(navigator.find_path("wp0"))
+    navigator.set_current_waypoint("wp0")
+    print(navigator.find_path("spawn"))
+    navigator.set_current_waypoint("spawn")

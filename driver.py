@@ -1,3 +1,5 @@
+import math
+
 from bluetooth_robot import BTRobot
 from navigation import Navigator
 import time
@@ -7,8 +9,8 @@ from typing import Callable
 class BTDriver:
 
     COMMANDS = {
-        "W": lambda robot, dst: robot.stab_forward_distance(distance=dst),
-        "R": lambda robot, degrees: robot.rotate(degrees=degrees),
+        "F": lambda robot, dst: robot.go(dst),
+        "R": lambda robot, degrees: robot.rotate(degrees),
     }
     COMMAND_ARGS_SEPARATOR = ","
 
@@ -63,7 +65,16 @@ class BTDriver:
                     break
                 j += 1
                 angle += next_cmd_args[0]
-            result.append((cmd_key, [angle, ]))
+
+            angle = math.copysign(abs(angle) % 360, angle)
+
+            if angle != 0:
+                if angle > 180:
+                    angle = 180 - angle
+                elif angle < -180:
+                    angle = -180 - angle
+
+                result.append((cmd_key, [angle, ]))
             i = j
 
         return result
@@ -80,11 +91,14 @@ class BTDriver:
         if self.navigator.current_waypoint.name == wp_name:
             return
 
+        print(f"Going to te point {wp_name}...")
+
         path = self.navigator.find_path(wp_name)
         self.execute_many(path)
         self.navigator.set_current_waypoint(wp_name)
+        print(f"Arrived to the point {wp_name}")
 
 
 if __name__ == "__main__":
-    res = BTDriver._merge_commands(["R90", "W50", "R-180", "R90", "W40"])
+    res = BTDriver._merge_commands(["R90", "F50", "R-180", "R-180", "F40"])
     print(res)

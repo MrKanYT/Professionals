@@ -32,6 +32,7 @@ def test_distance_stop(tryings: int, robot: BTRobot, min_distance: int, max_dist
 
 
 def main(robot: BTRobot):
+
     camera = WebCamera(
         "http://192.168.137.31/cam-lo.jpg",
         "http://192.168.137.31/cam-mid.jpg",
@@ -40,16 +41,26 @@ def main(robot: BTRobot):
 
     navigator = Navigator("locations/test_loc.json")
 
-    robot.right(degrees=90)
-
     driver = BTDriver(robot, navigator)
-    driver.go_to("cube0")
+
     driver.go_to("qr_code")
+
+    driver.go_to("cube0")
+    robot.take_item()
+
+    driver.go_to("spawn")
+    robot.drop_item()
+
+    driver.go_to("cube1")
+    robot.take_item()
+
+    driver.go_to("spawn")
+    robot.drop_item()
 
 
 if __name__ == "__main__":
 
-    _robot = BTRobot("COM9")
+    _robot = BTRobot("COM10")
     time.sleep(1)
 
     try:
