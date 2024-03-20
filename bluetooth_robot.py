@@ -28,7 +28,7 @@ class BTRobot:
     _bt_io: multiprocessing.Process
 
     def __init__(self, port):
-        self._telemetry_len = 5
+        self._telemetry_len = 7
 
         self._shared_memory_manager = Manager()
         self._shared_telemetry = ShareableList([0] * self._telemetry_len)
@@ -56,26 +56,6 @@ class BTRobot:
 
         #self.reset_position()
         print("Robot BT ready")
-
-    def release(self):
-        self.reset_position()
-        self._on_releasing.set()
-
-    @property
-    def telemetry(self) -> list[int]:
-        return list(self._shared_telemetry)
-
-    @property
-    def forward_distance(self) -> int:
-        return self._shared_telemetry[0]
-
-    @property
-    def left_distance(self) -> int:
-        return self._shared_telemetry[1]
-
-    @property
-    def right_distance(self) -> int:
-        return self._shared_telemetry[2]
 
     @staticmethod
     def bluetooth_io(port: str,
@@ -106,10 +86,13 @@ class BTRobot:
             try:
                 bdata = ser.readline()
                 data = bdata.decode().strip()
-                print(f"BT >>> {data}")
+
+                if on_releasing.is_set():
+                    break
+
                 if data == "OK":
                     confirmations_left -= 1
-                    print(f"BT CONFIRMED >>> {confirmations_left} LEFT")
+                    #print(f"BT CONFIRMED >>> {confirmations_left} LEFT")
                     if confirmations_left <= 0:
                         on_command_completed.set()
                         shared_confirmations.value = 1
@@ -122,13 +105,10 @@ class BTRobot:
                             else:
                                 break
 
-                if on_releasing.is_set():
-                    break
-
                 if shared_command.value:
-                    print(f"SEND BT >>> {shared_command.value}")
+                    #print(f"SEND BT >>> {shared_command.value}")
                     ser.write(shared_command.value.encode("ascii"))
-                    print(f"SET CONFIRMATIONS: {shared_confirmations.value}")
+                    #print(f"SET CONFIRMATIONS: {shared_confirmations.value}")
                     confirmations_left = shared_confirmations.value
                     shared_command.value = ""
                     on_command_sent.set()
@@ -137,7 +117,27 @@ class BTRobot:
 
         ser.close()
 
-    def send_command(self, command: str, await_sending: bool = True, await_completion: bool = False, await_completion_timeout: float = 10, required_confirmations: int = 1):
+    @property
+    def telemetry(self) -> list[int]:
+        return list(self._shared_telemetry)
+
+    @property
+    def forward_distance(self) -> int:
+        return self._shared_telemetry[0]
+
+    @property
+    def left_distance(self) -> int:
+        return self._shared_telemetry[1]
+
+    @property
+    def right_distance(self) -> int:
+        return self._shared_telemetry[2]
+
+    def send_command(self, command: str,
+                     await_sending: bool = True,
+                     await_completion: bool = False,
+                     await_completion_timeout: float = 3,
+                     required_confirmations: int = 1):
         self._on_command_sent.clear()
         self._on_command_completed.clear()
         self._shared_confirmations.value = required_confirmations
@@ -149,27 +149,32 @@ class BTRobot:
         if await_completion:
             self._on_command_completed.wait(timeout=await_completion_timeout)
 
-    def go(self, distance: int, distance_to_wall: int = 0):
-        self.send_command(f"F{distance * 10}", await_completion=True, required_confirmations=2)
+    def go(self, distance: int):
+        print(f"Going {distance}")
+        self.send_command(f"F{distance * 10}", await_completion=True, required_confirmations=1)
 
     def rotate(self, degrees: int):
-
+        print(f"Rotating: {degrees}")
         if abs(degrees) == 90:
             degrees = math.copysign(101, degrees)
 
         if abs(degrees) == 180:
             degrees = math.copysign(185, degrees)
 
-        self.send_command(f"R{degrees}", await_completion=True, required_confirmations=2)
+        self.send_command(f"R{degrees}", await_completion=True, required_confirmations=1)
 
     def reset_position(self):
         self.send_command("N")
 
-    def take_item(self):
-        self.send_command("H0", await_completion=True)
+    def close_grabber(self):
+        self.send_command("H0", await_completion=True, required_confirmations=2)
 
-    def drop_item(self):
-        self.send_command("H2", await_completion=True)
+    def open_grabber(self):
+        self.send_command("H2", await_completion=True, required_confirmations=2)
+
+    def release(self):
+        self.reset_position()
+        self._on_releasing.set()
 
 
 if __name__ == "__main__":

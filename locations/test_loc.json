@@ -19,21 +19,10 @@
           "name": "cube1",
           "path_to": "F65 R90 F40",
           "path_from": "R180 F40 R-90 F65 R180"
-        },
-        {
-          "path_to": "L F R F",
-          "children": [
-            {
-              "name": "cube2",
-              "path_to": "R F"
-            },
-            {
-              "name": "cube3",
-              "path_to": "F"
-            }
-          ]
         }
       ]
     }
   ]
 }
+
+

@@ -4,6 +4,10 @@ from bluetooth_robot import BTRobot
 from navigation import Navigator
 import time
 from typing import Callable
+from camera import WebCamera
+import grab_helper
+
+import cv2
 
 
 class BTDriver:
@@ -16,10 +20,12 @@ class BTDriver:
 
     robot: BTRobot
     navigator: Navigator
+    camera: WebCamera
 
-    def __init__(self, robot: BTRobot, navigator: Navigator):
+    def __init__(self, robot: BTRobot, navigator: Navigator, camera: WebCamera):
         self.robot = robot
         self.navigator = navigator
+        self.camera = camera
 
     @staticmethod
     def _parse_command(command: str) -> tuple[str, list[int | float]]:
@@ -97,6 +103,80 @@ class BTDriver:
         self.execute_many(path)
         self.navigator.set_current_waypoint(wp_name)
         print(f"Arrived to the point {wp_name}")
+
+    def _get_grabber_center(self) -> tuple[int, int]:
+        sum_x = sum_y = 0
+        n = 0
+
+        find_area = grab_helper.get_area(self.camera.image_size[0], self.camera.image_size[1], grab_helper.GRABBER_FIND_AREA)
+
+        for i in range(5):
+            cx, cy = grab_helper.find_grabber_center(self.camera.current_image_hsv, find_area)
+            if cx != -1 and cy != -1:
+                n += 1
+                sum_x += cx
+                sum_y += cy
+            time.sleep(0.2)
+
+        if n == 0:
+            return -1, -1
+
+        return int(sum_x / n), int(sum_y / n)
+
+    def _find_object(self) -> tuple[int, int, int]:
+        sum_x = sum_y = sum_r = 0
+        n = 0
+
+        find_area = grab_helper.get_area(self.camera.image_size[0], self.camera.image_size[1],
+                                         grab_helper.CUBE_FIND_AREA)
+
+        return grab_helper.find_cube(self.camera.current_image_hsv, find_area)
+
+    def take_item(self):
+        self.robot.open_grabber()
+
+        grabber_center = self._get_grabber_center()
+        self.camera.draw_grabber_pos(grabber_center)
+
+        not_found = 10
+        while True:
+            cx, cy, rot = self._find_object()
+
+            if None not in (cx, cy, rot):
+                not_found = 10
+                self.camera.draw_object_pos((cx, cy))
+
+                rot_delta = grabber_center[0] - cx
+                dist_delta = grabber_center[1] - cy
+
+                if rot_delta > 15:
+                    self.robot.rotate(-5)
+                    continue
+                elif rot_delta < -15:
+                    self.robot.rotate(5)
+                    continue
+
+                if dist_delta > 400:
+                    self.robot.go(15)
+                elif dist_delta > 200:
+                    self.robot.go(5)
+                elif dist_delta > 40:
+                    self.robot.go(3)
+                else:
+                    break
+
+            else:
+                self.camera.draw_object_pos(None)
+                time.sleep(0.5)
+                not_found -= 1
+                if not_found <= 0:
+                    raise TimeoutError
+
+            #time.sleep(0.0)
+
+        print("Close grabber")
+        self.robot.close_grabber()
+        print("Closed grabber")
 
 
 if __name__ == "__main__":
