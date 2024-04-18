@@ -165,7 +165,7 @@ void setup()
     pinMode(68, INPUT);
     pinMode(69, OUTPUT);
     digitalWrite(69, 0);
-    pinMode(13, OUTPUT);
+    pinMode(65, OUTPUT);
     digitalWrite(13, 0);
     pinMode(34, OUTPUT);
     digitalWrite(34, 0);
@@ -461,7 +461,7 @@ void loop()
             _gen3O = ! _gen3O;
         }
     }
-    digitalWrite(13, _gen3O);
+    digitalWrite(65, _gen3O);
     if (_gtv27) 
     {
          if (! _gen1I) 
@@ -636,10 +636,10 @@ void loop()
     }
     //Плата:13
 //Наименование:Передача PWM на моторы
-    analogWrite(12, _gtv7);
+    analogWrite(12, (map((_gtv7), (0), (255), (0), (255))));
     digitalWrite(35, _gtv5);
     digitalWrite(34, !(_gtv5));
-    analogWrite(8, (map((_gtv6), (0), (255), (0), (250))));
+    analogWrite(8, (map((_gtv6), (0), (255), (0), (255))));
     digitalWrite(37, _gtv12);
     digitalWrite(36, !(_gtv12));
     //Плата:14

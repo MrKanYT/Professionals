@@ -1,3 +1,4 @@
+import cv2
 import cv2 as cv
 import numpy as np
 from typing import TypeAlias
@@ -105,6 +106,15 @@ def read_code(image_hsv: cv.UMat) -> tuple[list[bool] | None, tuple[Point, Point
     return values, tuple(code_rect), bit_positions
 
 
+def read_qr_code(bgr_image: cv.UMat) -> str | None:
+
+    qcd = cv2.QRCodeDetector()
+    retval, decoded_info, points, straight_qrcode = qcd.detectAndDecodeMulti(bgr_image)
+    for c in decoded_info:
+        if c:
+            return c
+
+
 def test():
     img = cv.imread(f"test_images/scanner/demo.png")
     hsv_img = cv.cvtColor(img, cv.COLOR_BGR2HSV)
@@ -124,7 +134,7 @@ def test():
 
         for i, p in enumerate(bit_positions):
             color = (0, 255, 0) if values[i] else (0, 0, 255)
-            cv.putText(img, str(i), (p[0], p[1] - 15), cv.FONT_HERSHEY_SIMPLEX, 0.9, (60, 80, 255), 2)
+            cv.putText(img, str(i), (p[0], p[1] - 15), cv.FONT_HERSHEY_COMPLEX, 0.9, (60, 80, 255), 2)
             cv.circle(img, p, 2, color, 3)
             cv.imshow(f"Test", img)
     else:

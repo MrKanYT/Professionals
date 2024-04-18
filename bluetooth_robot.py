@@ -24,11 +24,16 @@ class BTRobot:
     _on_command_sent: Event
     _on_command_completed: Event
     _on_releasing: Event
+    _on_telemetry_updated: Event
 
     _bt_io: multiprocessing.Process
 
+    _watcher: multiprocessing.Process
+    _watcher_emergency_stop_distance: Value
+
     def __init__(self, port):
         self._telemetry_len = 7
+        self._speed = 24.7436
 
         self._shared_memory_manager = Manager()
         self._shared_telemetry = ShareableList([0] * self._telemetry_len)
@@ -39,6 +44,7 @@ class BTRobot:
         self._on_command_sent = Event()
         self._on_command_completed = Event()
         self._on_releasing = Event()
+        self._on_telemetry_updated = Event()
 
         self._bt_io = multiprocessing.Process(target=BTRobot.bluetooth_io, args=(
             port,
@@ -48,13 +54,36 @@ class BTRobot:
             self._on_bluetooth_ready,
             self._on_command_sent,
             self._on_command_completed,
-            self._on_releasing))
+            self._on_releasing,
+            self._on_telemetry_updated))
 
         self._bt_io.start()
 
         self._on_bluetooth_ready.wait()
 
-        #self.reset_position()
+        self._watcher_status = self._shared_memory_manager.Value(ctypes.c_uint8, 0)
+        self._watcher_left_correct_min = self._shared_memory_manager.Value(ctypes.c_uint16, 0)
+        self._watcher_left_correct_max = self._shared_memory_manager.Value(ctypes.c_uint16, 0)
+        self._watcher_target_distance = self._shared_memory_manager.Value(ctypes.c_uint16, 0)
+        self._watcher_command = self._shared_memory_manager.Value(ctypes.c_char_p, "")
+
+        self._watcher = multiprocessing.Process(target=BTRobot.watcher, args=(
+            self._speed,
+            self._on_releasing,
+            self._on_telemetry_updated,
+            self._on_command_completed,
+            self._on_command_sent,
+            self._shared_telemetry,
+            self._shared_command,
+            self._shared_confirmations,
+            self._watcher_status,
+            self._watcher_left_correct_min,
+            self._watcher_left_correct_max,
+            self._watcher_target_distance,
+            self._watcher_command
+        ))
+        #self._watcher.start()
+
         print("Robot BT ready")
 
     @staticmethod
@@ -65,7 +94,8 @@ class BTRobot:
                      on_bluetooth_ready: Event,
                      on_command_sent: Event,
                      on_command_completed: Event,
-                     on_releasing: Event):
+                     on_releasing: Event,
+                     on_telemetry_updated: Event):
         trying = 3
         while trying > 0:
             try:
@@ -87,26 +117,32 @@ class BTRobot:
                 bdata = ser.readline()
                 data = bdata.decode().strip()
 
+                #print(f"BT >>> {data}")
+
                 if on_releasing.is_set():
                     break
 
                 if data == "OK":
                     confirmations_left -= 1
-                    #print(f"BT CONFIRMED >>> {confirmations_left} LEFT")
+                    print(f"BT CONFIRMED >>> {confirmations_left} LEFT")
                     if confirmations_left <= 0:
                         on_command_completed.set()
                         shared_confirmations.value = 1
                 else:
-                    splitted = data[1:].split(" ")
+                    splitted = data.split(" ")
                     if any(splitted):
+                        bad_packet = False
                         for i in range(len(splitted)):
                             if splitted[i].isdigit():
                                 shared_telemetry[i] = int(splitted[i])
                             else:
+                                bad_packet = True
                                 break
+                        if not bad_packet:
+                            on_telemetry_updated.set()
 
                 if shared_command.value:
-                    #print(f"SEND BT >>> {shared_command.value}")
+                    print(f"SEND BT >>> {shared_command.value}")
                     ser.write(shared_command.value.encode("ascii"))
                     #print(f"SET CONFIRMATIONS: {shared_confirmations.value}")
                     confirmations_left = shared_confirmations.value
@@ -116,6 +152,161 @@ class BTRobot:
                 break
 
         ser.close()
+
+    @staticmethod
+    def watcher(
+            speed: float,
+            on_releasing: Event,
+            on_telemetry_updated: Event,
+            on_command_completed: Event,
+            on_command_sent: Event,
+            telemetry: ShareableList,
+            shared_command: Value,
+            shared_confirms: Value,
+            status: Value,
+            left_correct_min: Value,
+            left_correct_max: Value,
+            target_distance: Value,
+            last_command: Value,
+    ):
+
+        is_correcting = False
+        left_distance_buffer = []
+        left_distance_history = []
+        previous_speed_correction = 0
+        block_correcting = False
+
+        while not on_releasing.is_set():
+            on_telemetry_updated.wait()
+            on_telemetry_updated.clear()
+
+            t = time.time()
+
+            is_correcting = status.value == 0 and (left_correct_min.value != 0 or left_correct_max.value != 0)
+            if not is_correcting:
+                left_distance_buffer.clear()
+                left_distance_history.clear()
+                previous_speed_correction = 0
+            
+            if is_correcting:
+                left_distance_buffer.append(telemetry[1])
+                if len(left_distance_buffer) > 6:
+                    del left_distance_buffer[0]
+
+                if len(left_distance_buffer) >= 6:
+                    average_left_distance = sum(left_distance_buffer) / len(left_distance_buffer)
+                    left_distance_history.append(average_left_distance)
+
+                    if average_left_distance > 40 and previous_speed_correction != 0:
+                        on_command_sent.clear()
+                        shared_command.value = f"J0"
+                        on_command_sent.wait()
+                        previous_speed_correction = 0
+                    else:
+
+                        if len(left_distance_history) > 10:
+                            del left_distance_history[0]
+
+                            sign = 1 if left_distance_history[-1] - left_distance_history[0] > 0 else -1
+                            delta = abs(left_distance_history[-1] - left_distance_history[0])
+                            print(f"ERROR {delta}")
+                            speed_correction = 0
+
+                            if delta > 1.5:
+                                speed_correction = 20
+                            elif delta > 0.8:
+                                speed_correction = 10
+
+                            speed_correction *= sign
+
+                            if speed_correction != previous_speed_correction:
+                                on_command_sent.clear()
+                                shared_command.value = f"V{speed_correction}"
+                                on_command_sent.wait()
+                            previous_speed_correction = speed_correction
+
+
+
+
+                '''
+                if left_time == 0 and curr < 40:
+                    left_time = t
+                    left_start = curr
+                else:
+
+                    duration = t - left_time
+
+                    if duration > 8:
+                        left_time = t
+                        left_start = curr
+
+                    elif telemetry[1] < 40 and target_distance.value - (duration * speed) > 8:
+                        err = curr - left_start
+
+                        angle = 0
+                        dist = duration * speed
+
+                        error = False
+                        try:
+                            if left_correct_min.value != 0 and err < left_correct_min.value:
+                                print(f"Left time: {left_time}")
+                                print(f"Start: {left_start}; Current: {curr}; Error: {err}; Dist: {dist}")
+                                angle = math.degrees(math.asin((-err) / dist))
+
+                            elif left_correct_max.value != 0 and err > left_correct_max.value:
+                                print(f"Left time: {left_time}")
+                                print(f"Start: {left_start}; Current: {curr}; Error: {err}; Dist: {dist}")
+                                angle = -math.degrees(math.asin(err / dist))
+                        except ValueError:
+                            error = True
+
+                        if angle != 0 and not error:
+
+                            status.value = 2
+
+                            print(f"Correcting to angle {angle}")
+
+                            on_command_sent.clear()
+                            on_command_completed.clear()
+                            shared_confirms.value = 1
+                            shared_command.value = "N"
+                            on_command_sent.wait()
+
+                            time.sleep(0.5)
+
+                            on_command_sent.clear()
+                            on_command_completed.clear()
+                            shared_confirms.value = 1
+                            shared_command.value = f"R{int(round(angle))}"
+                            on_command_completed.wait(timeout=3)
+
+                            time.sleep(0.5)
+
+                            on_command_sent.clear()
+                            on_command_completed.clear()
+                            shared_confirms.value = 1
+                            shared_command.value = "N"
+                            on_command_sent.wait()
+
+                            time.sleep(0.5)
+
+                            on_command_sent.clear()
+                            on_command_completed.clear()
+                            shared_confirms.value = 1
+
+                            left_start = telemetry[1]
+
+                            if last_command.value.startswith("W"):
+                                shared_command.value = last_command.value
+                            elif target_distance.value - dist > 0:
+                                print(f"DIST LEFT: {round(target_distance.value - dist)}")
+                                shared_command.value = f"{'Fc' if last_command.value.startswith('Fc') else 'F'}{round(target_distance.value - dist) * 10}"
+                    else:
+                        status.value = 0
+                        left_time = 0
+                        left_start = 0'''
+
+
 
     @property
     def telemetry(self) -> list[int]:
@@ -136,7 +327,7 @@ class BTRobot:
     def send_command(self, command: str,
                      await_sending: bool = True,
                      await_completion: bool = False,
-                     await_completion_timeout: float = 3,
+                     await_completion_timeout: float = 20,
                      required_confirmations: int = 1):
         self._on_command_sent.clear()
         self._on_command_completed.clear()
@@ -149,30 +340,63 @@ class BTRobot:
         if await_completion:
             self._on_command_completed.wait(timeout=await_completion_timeout)
 
-    def go(self, distance: int):
-        print(f"Going {distance}")
-        self.send_command(f"F{distance * 10}", await_completion=True, required_confirmations=1)
 
-    def rotate(self, degrees: int):
+    def go(self, distance: int, correct: bool = False, *args, wall_distance: int = 0):
+        print(f"Going {distance if wall_distance == 0 else 'to wall ' + str(wall_distance)} {'(correction)' if correct else ''}")
+
+        if wall_distance == 0:
+            cmd = f"F{distance * 10}"
+        else:
+            cmd = f"W{wall_distance * 10}"
+
+        if correct:
+            self._watcher_left_correct_min.value = -5
+            self._watcher_left_correct_max.value = 5
+            self._watcher_target_distance.value = distance
+            self._watcher_command.value = cmd
+
+        self.send_command(cmd, await_completion=True, required_confirmations=1)
+
+        while self._watcher_status.value == 2:
+            self._on_command_completed.wait()
+
+        self._watcher_left_correct_min.value = 0
+        self._watcher_left_correct_max.value = 0
+        self._watcher_target_distance.value = 0
+
+        if wall_distance > 0 and self.forward_distance - wall_distance > 10:
+            self.go(distance, correct=correct, wall_distance=wall_distance)
+
+    def rotate(self, degrees: int, wait: bool = True):
         print(f"Rotating: {degrees}")
-        if abs(degrees) == 90:
-            degrees = math.copysign(101, degrees)
 
-        if abs(degrees) == 180:
-            degrees = math.copysign(185, degrees)
-
-        self.send_command(f"R{degrees}", await_completion=True, required_confirmations=1)
+        self.send_command(f"R{degrees}", await_completion=wait, required_confirmations=1)
 
     def reset_position(self):
         self.send_command("N")
 
     def close_grabber(self):
-        self.send_command("H0", await_completion=True, required_confirmations=2)
+        self.send_command("H2", await_completion=False, required_confirmations=1)
+        time.sleep(4)
 
     def open_grabber(self):
-        self.send_command("H2", await_completion=True, required_confirmations=2)
+        self.send_command("H0", await_completion=False, required_confirmations=1)
+        time.sleep(4)
+
+    def set_red_led(self, status: bool):
+        self.send_command(f"G{int(status)}")
+
+    def set_green_led(self, status: bool):
+        self.send_command(f"L{int(status)}")
+
+    def set_led_freq(self, millis: int):
+        self.send_command(f"Q{millis}")
+
+    def set_servo_angle(self, degrees: int):
+        self.send_command(f"S{degrees}", await_completion=True)
 
     def release(self):
+        self.set_servo_angle(129)
         self.reset_position()
         self._on_releasing.set()
 

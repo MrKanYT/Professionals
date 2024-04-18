@@ -111,10 +111,10 @@ class Navigator:
 
 
 if __name__ == "__main__":
-    navigator = Navigator("locations/test_loc.json")
-    print(navigator.find_path("qr_code"))
-    navigator.set_current_waypoint("qr_code")
-    print(navigator.find_path("wp0"))
-    navigator.set_current_waypoint("wp0")
+    navigator = Navigator("locations/main.json")
+    print(navigator.find_path("cube1"))
+    navigator.set_current_waypoint("cube1")
+    print(navigator.find_path("storage"))
+    navigator.set_current_waypoint("storage")
     print(navigator.find_path("spawn"))
     navigator.set_current_waypoint("spawn")

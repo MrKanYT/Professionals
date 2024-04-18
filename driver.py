@@ -1,5 +1,7 @@
 import math
 
+import numpy
+
 from bluetooth_robot import BTRobot
 from navigation import Navigator
 import time
@@ -9,14 +11,23 @@ import grab_helper
 
 import cv2
 
-
 class BTDriver:
 
     COMMANDS = {
+        "Wc": lambda robot, dst: robot.go(0, wall_distance=dst, correct=True),
+        "W": lambda robot, dst: robot.go(0, wall_distance=dst),
+        "Fc": lambda robot, dst: robot.go(dst, correct=True),
         "F": lambda robot, dst: robot.go(dst),
         "R": lambda robot, degrees: robot.rotate(degrees),
     }
     COMMAND_ARGS_SEPARATOR = ","
+
+    SERVO_LEVEL_0 = 105
+    SERVO_LEVEL_0_1 = 90
+
+    SHELF_1 = 92
+    SHELF_2 = 40
+    SHELF_DISTANCE = 25
 
     robot: BTRobot
     navigator: Navigator
@@ -53,7 +64,7 @@ class BTDriver:
         self.COMMANDS[cmd_key](self.robot, *cmd_args)
 
     @staticmethod
-    def _merge_commands(commands: list[str]) -> list[tuple[str, list[int | float]]]:
+    def _merge_rot_commands(commands: list[str]) -> list[tuple[str, list[int | float]]]:
         result = []
         l = len(commands)
         i = 0
@@ -85,10 +96,47 @@ class BTDriver:
 
         return result
 
+    @staticmethod
+    def _merge_wall_commands(commands: list[tuple[str, list[int | float]]]) -> list[tuple[str, list[int | float]]]:
+        result = []
+        l = len(commands)
+        i = 0
+        while i < l:
+            cmd_key, cmd_args = commands[i]
+            if cmd_key != "F" and cmd_key != "Fc":
+                result.append((cmd_key, cmd_args))
+                i += 1
+                continue
+            wall_dist = 0
+            j = i + 1
+            c = ""
+            while j < l:
+                next_cmd_key, next_cmd_args = commands[j]
+                if next_cmd_key != "W" and next_cmd_key != "Wc":
+                    break
+                c = next_cmd_key
+                j += 1
+                wall_dist = next_cmd_args[0]
+
+            if wall_dist > 0:
+                result.append((c, [wall_dist]))
+            else:
+                result.append((cmd_key, cmd_args))
+
+            i = j
+        return result
+
     def execute_many(self, commands: list[str]):
-        merged = BTDriver._merge_commands(commands)
+        print(f"EXECUTE MANY: {commands}")
+        merged = BTDriver._merge_rot_commands(commands)
+        print(f"MERGED ROT: {merged}")
+        merged = BTDriver._merge_wall_commands(merged)
+        print(f"EXECUTE WALL: {merged}")
         for cmd in merged:
             self.execute(cmd)
+            time.sleep(0.2)
+            self.robot.reset_position()
+            time.sleep(0.2)
 
     def go_to(self, wp_name: str):
         if not wp_name:
@@ -123,24 +171,46 @@ class BTDriver:
 
         return int(sum_x / n), int(sum_y / n)
 
-    def _find_object(self) -> tuple[int, int, int]:
-        sum_x = sum_y = sum_r = 0
-        n = 0
-
+    def rotate_to_object(self):
         find_area = grab_helper.get_area(self.camera.image_size[0], self.camera.image_size[1],
                                          grab_helper.CUBE_FIND_AREA)
 
-        return grab_helper.find_cube(self.camera.current_image_hsv, find_area)
+        f = 10
+        while True:
+            cx, cy, rot = grab_helper.find_cube(self.camera.current_image_hsv, find_area)
+            if None not in (cx, cy, rot):
+                f -= 1
+                if f <= 0:
+                    return
+            else:
+                f = 10
+                self.robot.rotate(15)
 
-    def take_item(self):
+
+    def take_item(self, color: str):
+        self.robot.set_servo_angle(self.SERVO_LEVEL_0)
+
         self.robot.open_grabber()
 
         grabber_center = self._get_grabber_center()
         self.camera.draw_grabber_pos(grabber_center)
 
+
+        cube_find_area = grab_helper.get_area(self.camera.image_size[0], self.camera.image_size[1],
+                                         grab_helper.CUBE_FIND_AREA)
+        prev_image_time = 0
         not_found = 10
         while True:
-            cx, cy, rot = self._find_object()
+
+            hsv = self.camera.current_image_hsv
+            image_time = self.camera.image_time
+
+            if image_time == prev_image_time:
+                time.sleep(0.05)
+                continue
+            prev_image_time = image_time
+
+            cx, cy, rot = grab_helper.find_cube(hsv, cube_find_area, color)
 
             if None not in (cx, cy, rot):
                 not_found = 10
@@ -149,36 +219,66 @@ class BTDriver:
                 rot_delta = grabber_center[0] - cx
                 dist_delta = grabber_center[1] - cy
 
-                if rot_delta > 15:
-                    self.robot.rotate(-5)
+                if rot_delta > 10:
+                    self.robot.rotate(-2)
                     continue
-                elif rot_delta < -15:
-                    self.robot.rotate(5)
+                elif rot_delta < -10:
+                    self.robot.rotate(2)
                     continue
 
-                if dist_delta > 400:
+                
+                if dist_delta > 300:
                     self.robot.go(15)
                 elif dist_delta > 200:
-                    self.robot.go(5)
-                elif dist_delta > 40:
-                    self.robot.go(3)
+                    self.robot.go(4)
+                elif dist_delta > 28:
+                  
+                    self.robot.go(2)
                 else:
                     break
 
+
             else:
                 self.camera.draw_object_pos(None)
+                
                 time.sleep(0.5)
                 not_found -= 1
                 if not_found <= 0:
                     raise TimeoutError
 
-            #time.sleep(0.0)
+            time.sleep(0.05)
 
         print("Close grabber")
         self.robot.close_grabber()
+
         print("Closed grabber")
+        self.camera.draw_object_pos(None)
+        self.camera.draw_grabber_pos(None)
+        time.sleep(1)
+        #self.robot.set_servo_angle(self.SERVO_LEVEL_0_1)
+        self.robot.go(-15)
+
+        time.sleep(1)
+
+    def put(self, shelf: int):
+        print(f"Putting cube to the shelf {shelf}")
+
+        shelf_angle = self.SHELF_1 if shelf == 1 else self.SHELF_2
+        self.robot.set_servo_angle(shelf_angle)
+
+        self.robot.go(0, correct=True, wall_distance=self.SHELF_DISTANCE)
+
+        time.sleep(1)
+        self.robot.open_grabber()
+
+        time.sleep(1)
+        self.robot.go(-10)
+
+        time.sleep(1)
+
+        
 
 
 if __name__ == "__main__":
-    res = BTDriver._merge_commands(["R90", "F50", "R-180", "R-180", "F40"])
+    res = BTDriver._merge_wall_commands([('R', [180.0]), ('Fc', [70]), ('Wc', [40]), ('R', [90.0]), ('Wc', [100]), ('R', [90.0]), ('F', [65])])
     print(res)

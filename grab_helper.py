@@ -1,24 +1,36 @@
 import cv2
 import random
+import math
 
-GRABBER_COLOR_0_MIN = (170, 50, 50)
+GRABBER_COLOR_0_MIN = (170, 40, 40)
 GRABBER_COLOR_0_MAX = (180, 255, 255)
 
-GRABBER_COLOR_1_MIN = (0, 50, 50)
+GRABBER_COLOR_1_MIN = (0, 40, 40)
 GRABBER_COLOR_1_MAX = (10, 255, 255)
 
-GRABBER_FIND_AREA = (0, 1), (0.7, 1)
+
+LIGHT_BROWN_MIN = (10, 102, 153)
+LIGHT_BROWN_MAX = (18, 178, 255)
+LIGHT_BROWN_MIN_AREA = 1000
+
+GRABBER_FIND_AREA = (0, 1), (0.8, 1)
 
 CUBE_COLOR_HUE_WINDOW_START = -15
 CUBE_COLOR_HUE_WINDOW_SIZE = 30
 CUBE_COLOR_SATURATION_LIMITS = (40, 255)
 CUBE_COLOR_VALUE_LIMITS = (40, 255)
-CUBE_MIN_AREA = 2000
-CUBE_MAX_AREA = 30000
+CUBE_MIN_AREA = 2500
+CUBE_MAX_AREA = 60000
 
-CUBE_FIND_AREA = (0, 1), (0, 1)
+CUBE_FIND_AREA = (0, 1), (0, 0.85)
 
 CAMERA_DISTANCE = 740
+
+COLORS = {
+    "yellow": ((20, 125, 80), (33, 255, 255)),
+    "blue": ((75, 80, 45), (115, 255, 255)),
+    "black": ((0, 0, 0), (180, 110, 40))
+}
 
 
 def get_area(img_size_x: int, img_size_y: int, relative_size: tuple[tuple[float, float], tuple[float, float]]) -> tuple[tuple[int, int], tuple[int, int]]:
@@ -28,9 +40,11 @@ def get_area(img_size_x: int, img_size_y: int, relative_size: tuple[tuple[float,
 
 
 def find_grabber_center(image_hsv: cv2.UMat, area: tuple[tuple[int, int], tuple[int, int]]) -> tuple[int, int]:
+    return 410, 456
     image_hsv = image_hsv[area[1][0]:area[1][1], area[0][0]:area[0][1]]
 
     mask = cv2.inRange(image_hsv, GRABBER_COLOR_0_MIN, GRABBER_COLOR_0_MAX) + cv2.inRange(image_hsv, GRABBER_COLOR_1_MIN, GRABBER_COLOR_1_MAX)
+    cv2.imshow("Mask", mask)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if len(contours) < 2:
@@ -50,42 +64,30 @@ def find_grabber_center(image_hsv: cv2.UMat, area: tuple[tuple[int, int], tuple[
     return center
 
 
-def find_cube(image_hsv: cv2.UMat, area: tuple[tuple[int, int]]) -> tuple[int | None, int | None, bool | None]:
+def find_cube(image_hsv: cv2.UMat, area: tuple[tuple[int, int]], color: str) -> tuple[int | None, int | None, bool | None]:
     image_hsv = image_hsv[area[1][0]:area[1][1], area[0][0]:area[0][1]]
 
     contours = []
-    for i in range(1): #'''CUBE_COLOR_HUE_WINDOW_START, 181, CUBE_COLOR_HUE_WINDOW_SIZE'''):
-        if i + CUBE_COLOR_HUE_WINDOW_SIZE < 0:
+    clr = COLORS[color]
+
+    mask = cv2.inRange(image_hsv, clr[0], clr[1])
+    cv2.imshow("Mask", mask)
+    cv2.waitKey(1)
+
+    biggest_area = 0
+    biggest = None
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    for cnt in cnts:
+        a = cv2.contourArea(cnt)
+        if a < CUBE_MIN_AREA or a > CUBE_MAX_AREA:
             continue
+        if a > biggest_area:
+            biggest_area = a
+            biggest = cnt
 
-        if i < 0:
-            mask = cv2.inRange(image_hsv,
-                               (180 + i, CUBE_COLOR_SATURATION_LIMITS[0], CUBE_COLOR_VALUE_LIMITS[0]),
-                               (180, CUBE_COLOR_SATURATION_LIMITS[1], CUBE_COLOR_VALUE_LIMITS[1])) +\
-                   cv2.inRange(image_hsv,
-                               (0, CUBE_COLOR_SATURATION_LIMITS[0], CUBE_COLOR_VALUE_LIMITS[0]),
-                               (CUBE_COLOR_HUE_WINDOW_SIZE + i, CUBE_COLOR_SATURATION_LIMITS[1], CUBE_COLOR_VALUE_LIMITS[1]))
-        else:
-            '''mask = cv2.inRange(image_hsv, (i, CUBE_COLOR_SATURATION_LIMITS[0], CUBE_COLOR_VALUE_LIMITS[0]),
-                               (i + CUBE_COLOR_HUE_WINDOW_SIZE, CUBE_COLOR_SATURATION_LIMITS[1], CUBE_COLOR_VALUE_LIMITS[1]))'''
-            mask = cv2.inRange(image_hsv, GRABBER_COLOR_0_MIN, GRABBER_COLOR_0_MAX) + cv2.inRange(image_hsv,
-                                                                                                  GRABBER_COLOR_1_MIN,
-                                                                                                  GRABBER_COLOR_1_MAX)
-
-        biggest_area = 0
-        biggest = None
-        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        for cnt in cnts:
-            a = cv2.contourArea(cnt)
-            if a < CUBE_MIN_AREA or a > CUBE_MAX_AREA:
-                continue
-            if a > biggest_area:
-                biggest_area = a
-                biggest = cnt
-
-        if biggest is not None:
-            contours.append(biggest)
+    if biggest is not None:
+        contours.append(biggest)
 
     #cv2.imshow(f"Cnt {random.randint(0, 100)}", cv2.drawContours(img.copy(), contours, -1, (0, 255, 255), 1))
     #cv2.waitKey(0)
@@ -114,11 +116,52 @@ def find_cube(image_hsv: cv2.UMat, area: tuple[tuple[int, int]]) -> tuple[int | 
     return closest_center[0] + area[0][0], closest_center[1] + area[1][0], closest_rotated
 
 
-def calculate_distance(grabber_y: int, object_y: int) -> int:
-    return int((1 - object_y / grabber_y) * CAMERA_DISTANCE)
+'''def find_yellow(image_hsv: cv2.UMat) -> bool:
+    mask = cv2.inRange(image_hsv, YELLOW_MIN, YELLOW_MAX)
+    cv2.imshow("M", mask)
+    cv2.waitKey(1)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    return any([cv2.contourArea(c) > 2000 for c in contours])'''
+
+
+def find_lines(image_hsv: cv2.UMat) -> list[tuple[tuple[int, int], tuple[int, int]]]:
+    image_hsv = image_hsv[:450, :]
+    mask = cv2.inRange(image_hsv, (0, -1, -1), (180, 40, 130))
+
+    cv2.imshow("Brown mask", mask)
+    cv2.waitKey(0)
+
+    lines = []
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for cnt in contours:
+        area = cv2.contourArea(cnt, False)
+        print(area)
+        if area < LIGHT_BROWN_MIN_AREA:
+            continue
+
+        rows, cols = image_hsv.shape[:2]
+        [vx, vy, x, y] = cv2.fitLine(cnt, cv2.DIST_L2, 0, 0.01, 0.01)
+        lefty = int((-x * vy / vx) + y)
+        righty = int(((cols - x) * vy / vx) + y)
+        lines.append(((cols - 1, righty), (0, lefty)))
+
+    return lines
 
 
 if __name__ == "__main__":
+
+    image = cv2.imread("test_images/grabber/fit_line.png")
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    lines = find_lines(hsv)
+    print(lines)
+
+    for line in lines:
+        image = cv2.line(image, line[0], line[1], (0, 255, 0), 2)
+
+    cv2.imshow("Lines", image)
+    cv2.waitKey(0)
 
     '''for name in ("front", "45", "rot0", "rot1"):
 

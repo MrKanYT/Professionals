@@ -9,6 +9,8 @@ from multiprocessing.shared_memory import SharedMemory
 from multiprocessing import Value, Manager
 import ctypes
 
+import scanner
+
 
 class WebCamera:
 
@@ -23,6 +25,7 @@ class WebCamera:
     _shared_image_data: np.ndarray
     _shared_hsv_memory: SharedMemory
     _shared_hsv_data: np.ndarray
+    _shared_image_time: Value
 
     _shared_memory_manager: Manager
     _shared_is_releasing: Value
@@ -46,6 +49,8 @@ class WebCamera:
         self._shared_image_data = np.ndarray(image.shape, dtype=np.uint8, buffer=self._shared_image_memory.buf)
         self._shared_hsv_data = np.ndarray(image.shape, dtype=np.uint8, buffer=self._shared_hsv_memory.buf)
 
+
+
         self._shared_memory_manager = Manager()
         self._shared_is_releasing = self._shared_memory_manager.Value(ctypes.c_bool, False)
 
@@ -55,14 +60,20 @@ class WebCamera:
         self._shared_object_x = self._shared_memory_manager.Value(ctypes.c_uint16, 0)
         self._shared_object_y = self._shared_memory_manager.Value(ctypes.c_uint16, 0)
 
+        self._shared_text = self._shared_memory_manager.Value(ctypes.c_char_p, "")
+
+        self._shared_image_time = self._shared_memory_manager.Value(ctypes.c_uint64, 0)
+
         self._child_process = multiprocessing.Process(target=WebCamera.screen_updater, args=(
             self.medium_quality_url,
             image.shape,
+            self._shared_image_time,
             self._shared_is_releasing,
             self._shared_grabber_x,
             self._shared_grabber_y,
             self._shared_object_x,
-            self._shared_object_y
+            self._shared_object_y,
+            self._shared_text
         ))
         self._child_process.start()
 
@@ -75,18 +86,21 @@ class WebCamera:
     @staticmethod
     def screen_updater(imgae_url: str,
                        shape: tuple[int, int, int],
+                       image_time: Value,
                        is_releasing: Value,
                        grabber_x: Value,
                        graber_y: Value,
                        object_x: Value,
-                       object_y: Value):
+                       object_y: Value,
+                       text: Value):
         shared_memory = SharedMemory("Image")
         shared_memory_hsv = SharedMemory("HSV")
         shared_image = np.ndarray(shape, dtype=np.uint8, buffer=shared_memory.buf)
         shared_hsv = np.ndarray(shape, dtype=np.uint8, buffer=shared_memory_hsv.buf)
         while True:
-            t = time.time()
             img_response = urllib.request.urlopen(imgae_url)
+            t = time.time()
+            image_time.value = int(t * 1000)
 
             if is_releasing.value:
                 break
@@ -98,10 +112,12 @@ class WebCamera:
             np.copyto(shared_hsv, hsv)
 
             if grabber_x.value > 0 and graber_y.value > 0:
-                decoded = cv2.rectangle(decoded, (grabber_x.value - 5, graber_y.value - 5), (grabber_x.value + 5, graber_y.value + 5), (255, 255, 0), 1)
+                decoded = cv2.rectangle(decoded, (grabber_x.value - 5, graber_y.value - 5), (grabber_x.value + 5, graber_y.value + 5), (255, 255, 0), 2)
 
             if object_x.value > 0 and object_y.value > 0:
-                decoded = cv2.rectangle(decoded, (object_x.value - 5, object_y.value - 5), (object_x.value + 5, object_y.value + 5), (255, 0, 255), 1)
+                decoded = cv2.rectangle(decoded, (object_x.value - 5, object_y.value - 5), (object_x.value + 5, object_y.value + 5), (255, 0, 255), 2)
+
+            decoded = cv2.putText(decoded, text.value, (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
 
             cv2.imshow("Robot", decoded)
             cv2.waitKey(1)
@@ -117,6 +133,10 @@ class WebCamera:
         return self._shared_image_data
 
     @property
+    def image_time(self) -> int:
+        return self._shared_image_time.value
+
+    @property
     def current_image_hsv(self) -> np.ndarray:
         return self._shared_hsv_data
 
@@ -128,33 +148,36 @@ class WebCamera:
         self._shared_object_x.value = 0 if pos is None else pos[0]
         self._shared_object_y.value = 0 if pos is None else pos[1]
 
+    def set_text(self, text: str):
+        self._shared_text.value = text
+
 
 if __name__ == "__main__":
+    print("Connect")
     camera = WebCamera(
-        "http://192.168.137.31/cam-lo.jpg",
-        "http://192.168.137.31/cam-mid.jpg",
-        "http://192.168.137.31/cam-hi.jpg"
+        "http://192.168.137.43/cam-lo.jpg",
+        "http://192.168.137.43/cam-mid.jpg",
+        "http://192.168.137.43/cam-hi.jpg"
     )
-    while True:
-        pass
-    '''import grab_helper
+    print("Connected")
+
+    import grab_helper
 
     while True:
-        image = camera.current_image
-
-        image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        image = camera.current_image.copy()
+        image_hsv = camera.current_image_hsv.copy()
 
         grabber_find_area = grab_helper.get_area(image.shape[1], image.shape[0], grab_helper.GRABBER_FIND_AREA)
 
         grabber_x, grabber_y = grab_helper.find_grabber_center(image_hsv, grabber_find_area)
-        cv2.rectangle(image, (grabber_x - 10, grabber_y - 10), (grabber_x + 10, grabber_y + 10), (255, 255, 0), 1)
+        camera.draw_grabber_pos((grabber_x, grabber_y))
 
         cube_find_area = grab_helper.get_area(image.shape[1], image.shape[0], grab_helper.CUBE_FIND_AREA)
-        cube_x, cube_y, rotated = grab_helper.find_cube(image_hsv, cube_find_area)
+        cube_x, cube_y, rotated = grab_helper.find_cube(image_hsv, cube_find_area, "blue")
+
         if None not in (cube_x, cube_y, rotated):
-            cv2.rectangle(image, (cube_x - 10, cube_y - 10), (cube_x + 10, cube_y + 10),
-                          (255 * rotated, 255 * (not rotated), 255), 1)
+            camera.draw_object_pos((cube_x, cube_y))
 
-        cv2.imshow("Cam", image)
+        #cv2.imshow("Cam", image)
 
-        cv2.waitKey(1)'''
+        cv2.waitKey(1)

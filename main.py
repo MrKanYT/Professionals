@@ -9,95 +9,76 @@ from camera import WebCamera
 from navigation import Navigator
 from driver import BTDriver
 import scanner
+import grab_helper
+import numpy as np
+import traceback
 
 
-url = ''
+def e1(driver: BTDriver):
+    hsv = driver.camera.current_image_hsv
 
+    cube_area = grab_helper.get_area(hsv.shape[1], hsv.shape[0], grab_helper.CUBE_FIND_AREA)
 
-def test_distance_stop(tryings: int, robot: BTRobot, min_distance: int, max_distance: int, start_distance: int):
-    for trying in range(1, tryings + 1):
+    shelf = 2
 
-        distance = random.randint(min_distance, max_distance)
-        print(f"Trying #{trying}: Distance - {distance};")
+    points = ("cube0", )#, "cube1")
+    colors = ("blue", "black")
+    i = 0
+    for point in points:
 
-        robot.back(distance_to_wall=start_distance)
-        print(f"Trying #{trying}: Start - {robot.forward_distance};")
+        driver.go_to(point)
 
-        time.sleep(3)
+        #driver.robot.set_servo_angle(130)
 
-        robot.forward(distance_to_wall=distance)
-        print(f"Trying #{trying}: Finish - {robot.forward_distance}; Error - {robot.forward_distance - distance}")
+        cx, cy, r = grab_helper.find_cube(hsv, cube_area, colors[i])
+        if None in (cx, cy):
+            continue
 
-        time.sleep(3)
+        driver.take_item("blue")
+
+        driver.go_to("storage")
+
+        time.sleep(1)
+
+        driver.put(shelf)
+        time.sleep(2)
+
+        time.sleep(2)
+
+        i += 1
+
+    driver.go_to("spawn")
 
 
 def main(robot: BTRobot, camera: WebCamera):
 
-    navigator = Navigator("locations/test_loc.json")
+    navigator = Navigator("locations/main.json")
 
     driver = BTDriver(robot, navigator, camera)
 
-    driver.take_item()
-    robot.open_grabber()
+    e1(driver)
 
 
 if __name__ == "__main__":
 
     _camera = WebCamera(
-        "http://192.168.137.31/cam-lo.jpg",
-        "http://192.168.137.31/cam-mid.jpg",
-        "http://192.168.137.31/cam-hi.jpg"
+        "http://192.168.137.43/cam-lo.jpg",
+        "http://192.168.137.43/cam-mid.jpg",
+        "http://192.168.137.43/cam-hi.jpg"
     )
 
-    _robot = BTRobot("COM10")
-    time.sleep(1)
-
+    _robot = BTRobot("COM6")
+    
     try:
+        _robot.set_led_freq(60000)
+        _robot.set_red_led(True)
+        _robot.set_green_led(True)
+
         main(_robot, _camera)
+
+        _robot.set_red_led(False)
+        _robot.set_green_led(False)
     finally:
         _robot.release()
         _camera.release()
-
-
-    '''while True:
-        image = camera.high_image
-        image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-        code_values, rect, bit_positions = scanner.read_code(image_hsv)
-        if None not in (code_values, rect, bit_positions):
-
-            for i, point in enumerate(bit_positions):
-                color = (0, 255, 0) if code_values[i] else (0, 0, 255)
-                image = cv2.circle(image, point, 2, color, 3)
-
-        image = cv2.putText(image, f"Перед: {robot.forward_distance}", (15, 30), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 200, 0), 1)
-        image = cv2.putText(image, f"Лево: {robot.left_distance}", (15, 50), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 200, 0), 1)
-        image = cv2.putText(image, f"Право: {robot.right_distance}", (15, 70), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 200, 0), 1)
-
-        cv2.imshow('gotcha', image)
-        key = cv2.waitKey(5)
-
-        if key == ord('q'):
-            break
-
-        if key == ord("w"):
-            robot.forward()
-
-        if key == ord("s"):
-            robot.back()
-
-        if key == ord(" "):
-            robot.stop()
-
-        if key == ord("a"):
-            robot.left()
-
-        if key == ord("d"):
-            robot.right()
-
-    cv2.destroyAllWindows()'''
-
-
-
-
 
