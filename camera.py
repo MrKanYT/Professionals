@@ -14,6 +14,8 @@ import scanner
 
 class WebCamera:
 
+    DISPLAY = False
+
     low_quality_url: str
     medium_quality_url: str
     high_quality_url: str
@@ -49,8 +51,6 @@ class WebCamera:
         self._shared_image_data = np.ndarray(image.shape, dtype=np.uint8, buffer=self._shared_image_memory.buf)
         self._shared_hsv_data = np.ndarray(image.shape, dtype=np.uint8, buffer=self._shared_hsv_memory.buf)
 
-
-
         self._shared_memory_manager = Manager()
         self._shared_is_releasing = self._shared_memory_manager.Value(ctypes.c_bool, False)
 
@@ -64,18 +64,19 @@ class WebCamera:
 
         self._shared_image_time = self._shared_memory_manager.Value(ctypes.c_uint64, 0)
 
-        self._child_process = multiprocessing.Process(target=WebCamera.screen_updater, args=(
-            self.medium_quality_url,
-            image.shape,
-            self._shared_image_time,
-            self._shared_is_releasing,
-            self._shared_grabber_x,
-            self._shared_grabber_y,
-            self._shared_object_x,
-            self._shared_object_y,
-            self._shared_text
-        ))
-        self._child_process.start()
+        if self.DISPLAY:
+            self._child_process = multiprocessing.Process(target=WebCamera.screen_updater, args=(
+                self.medium_quality_url,
+                image.shape,
+                self._shared_image_time,
+                self._shared_is_releasing,
+                self._shared_grabber_x,
+                self._shared_grabber_y,
+                self._shared_object_x,
+                self._shared_object_y,
+                self._shared_text
+            ))
+            self._child_process.start()
 
     @staticmethod
     def get_image(url: str) -> cv2.Mat:

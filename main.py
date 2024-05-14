@@ -3,7 +3,6 @@
 import time
 import random
 
-import cv2
 from bluetooth_robot import BTRobot
 from camera import WebCamera
 from navigation import Navigator

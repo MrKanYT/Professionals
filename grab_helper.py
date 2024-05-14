@@ -71,8 +71,6 @@ def find_cube(image_hsv: cv2.UMat, area: tuple[tuple[int, int]], color: str) -> 
     clr = COLORS[color]
 
     mask = cv2.inRange(image_hsv, clr[0], clr[1])
-    cv2.imshow("Mask", mask)
-    cv2.waitKey(1)
 
     biggest_area = 0
     biggest = None
