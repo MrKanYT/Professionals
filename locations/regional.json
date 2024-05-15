@@ -1,0 +1,33 @@
+{
+  "name": "spawn",
+  "children": [
+    {
+      "path_to": "W34",
+      "path_from": "R180 W40",
+      "children": [
+        {
+          "name": "storage",
+          "path_to": "R90",
+          "path_from": "R-90"
+        },
+        {
+          "name": "cube0",
+          "path_to": "R-90 W50",
+          "path_from": "R-180 F120 R-90"
+        },
+        {
+          "name": "cube1",
+          "path_to": "R-90 W45 R-93 W50",
+          "path_from": "R180 W40 R90 F120 R-90"
+        },
+        {
+          "name": "cube2",
+          "path_to": "R-90 W40 R-90 W35 R90 W50",
+          "path_from": "R180 Fc120 R-90 W35 R90 Fc120 R-90"
+        }
+      ]
+    }
+  ]
+}
+
+
