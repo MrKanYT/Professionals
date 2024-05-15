@@ -4,7 +4,7 @@ import time
 import random
 
 from bluetooth_robot import BTRobot
-from camera import WebCamera
+from camera import Camera
 from navigation import Navigator
 from driver import BTDriver
 import scanner
@@ -49,7 +49,7 @@ def e1(driver: BTDriver):
     driver.go_to("spawn")
 
 
-def main(robot: BTRobot, camera: WebCamera):
+def main(robot: BTRobot, camera: Camera):
 
     navigator = Navigator("locations/main.json")
 
@@ -60,11 +60,7 @@ def main(robot: BTRobot, camera: WebCamera):
 
 if __name__ == "__main__":
 
-    _camera = WebCamera(
-        "http://192.168.137.43/cam-lo.jpg",
-        "http://192.168.137.43/cam-mid.jpg",
-        "http://192.168.137.43/cam-hi.jpg"
-    )
+    _camera = Camera(0)
 
     _robot = BTRobot("COM6")
     

@@ -1,5 +1,4 @@
 import time
-import urllib.request
 
 import numpy as np
 import cv2
@@ -9,40 +8,27 @@ from multiprocessing.shared_memory import SharedMemory
 from multiprocessing import Value, Manager
 import ctypes
 
-import scanner
 
+class Camera:
 
-class WebCamera:
-
-    DISPLAY = False
-
-    low_quality_url: str
-    medium_quality_url: str
-    high_quality_url: str
+    DISPLAY = True
 
     image_size: tuple[int, int, int]
+    camera_index: int
 
-    _child_process: multiprocessing.Process
-    _shared_image_memory: SharedMemory
-    _shared_image_data: np.ndarray
-    _shared_hsv_memory: SharedMemory
-    _shared_hsv_data: np.ndarray
-    _shared_image_time: Value
+    def __init__(self, camera_index: int):
 
-    _shared_memory_manager: Manager
-    _shared_is_releasing: Value
+        self.camera_index = camera_index
 
-    def __init__(self,
-                 low_qual_url: str,
-                 med_qual__url: str,
-                 high_qual_url: str):
+        tmp_capture = cv2.VideoCapture(0)
+        if not tmp_capture.isOpened():
+            raise ConnectionError("Failed to open VideoCapture with index 0")
+        ret, image = tmp_capture.read()
+        if not ret:
+            raise ConnectionError("ret is False")
+        tmp_capture.release()
 
-        self.low_quality_url = low_qual_url
-        self.medium_quality_url = med_qual__url
-        self.high_quality_url = high_qual_url
-
-        image = WebCamera.get_image(self.medium_quality_url)
-        self.image_size = image.shape[1], image.shape[0], image.shape[2]
+        self.image_size = tuple(image.shape)
 
         self._shared_image_memory = SharedMemory("Image", create=True,
                                                  size=self.image_size[0] * self.image_size[1] * self.image_size[2] * 8)
@@ -64,29 +50,25 @@ class WebCamera:
 
         self._shared_image_time = self._shared_memory_manager.Value(ctypes.c_uint64, 0)
 
-        if self.DISPLAY:
-            self._child_process = multiprocessing.Process(target=WebCamera.screen_updater, args=(
-                self.medium_quality_url,
-                image.shape,
-                self._shared_image_time,
-                self._shared_is_releasing,
-                self._shared_grabber_x,
-                self._shared_grabber_y,
-                self._shared_object_x,
-                self._shared_object_y,
-                self._shared_text
-            ))
-            self._child_process.start()
+        self._child_process = multiprocessing.Process(target=Camera.screen_updater, args=(
+            self.DISPLAY,
+            self.camera_index,
+            self.image_size,
+            self._shared_image_time,
+            self._shared_is_releasing,
+            self._shared_grabber_x,
+            self._shared_grabber_y,
+            self._shared_object_x,
+            self._shared_object_y,
+            self._shared_text
+        ))
+        self._child_process.start()
+
 
     @staticmethod
-    def get_image(url: str) -> cv2.Mat:
-        img_response = urllib.request.urlopen(url)
-        imgnp = np.array(bytearray(img_response.read()), dtype=np.uint8)
-        return cv2.imdecode(imgnp, -1)
-
-    @staticmethod
-    def screen_updater(imgae_url: str,
-                       shape: tuple[int, int, int],
+    def screen_updater(display: bool,
+                       camera_index: int,
+                       image_size,
                        image_time: Value,
                        is_releasing: Value,
                        grabber_x: Value,
@@ -94,34 +76,40 @@ class WebCamera:
                        object_x: Value,
                        object_y: Value,
                        text: Value):
+
+        capture = cv2.VideoCapture(camera_index)
+        if not capture.isOpened():
+            print(f"Failed to open VideoCapture with index {camera_index}")
+            return
+
         shared_memory = SharedMemory("Image")
         shared_memory_hsv = SharedMemory("HSV")
-        shared_image = np.ndarray(shape, dtype=np.uint8, buffer=shared_memory.buf)
-        shared_hsv = np.ndarray(shape, dtype=np.uint8, buffer=shared_memory_hsv.buf)
+        shared_image = np.ndarray(image_size, dtype=np.uint8, buffer=shared_memory.buf)
+        shared_hsv = np.ndarray(image_size, dtype=np.uint8, buffer=shared_memory_hsv.buf)
+
         while True:
-            img_response = urllib.request.urlopen(imgae_url)
+            ret, image = capture.read()
             t = time.time()
             image_time.value = int(t * 1000)
 
             if is_releasing.value:
                 break
 
-            imgnp = np.array(bytearray(img_response.read()), dtype=np.uint8)
-            decoded = cv2.imdecode(imgnp, -1)
-            hsv = cv2.cvtColor(decoded, cv2.COLOR_BGR2HSV)
-            np.copyto(shared_image, decoded)
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            np.copyto(shared_image, image)
             np.copyto(shared_hsv, hsv)
 
-            if grabber_x.value > 0 and graber_y.value > 0:
-                decoded = cv2.rectangle(decoded, (grabber_x.value - 5, graber_y.value - 5), (grabber_x.value + 5, graber_y.value + 5), (255, 255, 0), 2)
+            if display:
+                if grabber_x.value > 0 and graber_y.value > 0:
+                    decoded = cv2.rectangle(image, (grabber_x.value - 5, graber_y.value - 5), (grabber_x.value + 5, graber_y.value + 5), (255, 255, 0), 2)
 
-            if object_x.value > 0 and object_y.value > 0:
-                decoded = cv2.rectangle(decoded, (object_x.value - 5, object_y.value - 5), (object_x.value + 5, object_y.value + 5), (255, 0, 255), 2)
+                if object_x.value > 0 and object_y.value > 0:
+                    decoded = cv2.rectangle(image, (object_x.value - 5, object_y.value - 5), (object_x.value + 5, object_y.value + 5), (255, 0, 255), 2)
 
-            decoded = cv2.putText(decoded, text.value, (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
+                decoded = cv2.putText(image, text.value, (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
 
-            cv2.imshow("Robot", decoded)
-            cv2.waitKey(1)
+                cv2.imshow("Robot", image)
+                cv2.waitKey(1)
 
         shared_memory.close()
         cv2.destroyAllWindows()
@@ -153,14 +141,8 @@ class WebCamera:
         self._shared_text.value = text
 
 
-if __name__ == "__main__":
-    print("Connect")
-    camera = WebCamera(
-        "http://192.168.137.43/cam-lo.jpg",
-        "http://192.168.137.43/cam-mid.jpg",
-        "http://192.168.137.43/cam-hi.jpg"
-    )
-    print("Connected")
+def test():
+    camera = Camera(0)
 
     import grab_helper
 
@@ -179,6 +161,7 @@ if __name__ == "__main__":
         if None not in (cube_x, cube_y, rotated):
             camera.draw_object_pos((cube_x, cube_y))
 
-        #cv2.imshow("Cam", image)
-
         cv2.waitKey(1)
+
+if __name__ == "__main__":
+    test()

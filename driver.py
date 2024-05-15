@@ -6,7 +6,7 @@ from bluetooth_robot import BTRobot
 from navigation import Navigator
 import time
 from typing import Callable
-from camera import WebCamera
+from camera import Camera
 import grab_helper
 
 import cv2
@@ -31,9 +31,9 @@ class BTDriver:
 
     robot: BTRobot
     navigator: Navigator
-    camera: WebCamera
+    camera: Camera
 
-    def __init__(self, robot: BTRobot, navigator: Navigator, camera: WebCamera):
+    def __init__(self, robot: BTRobot, navigator: Navigator, camera: Camera):
         self.robot = robot
         self.navigator = navigator
         self.camera = camera
