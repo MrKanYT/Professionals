@@ -2,7 +2,7 @@ import math
 
 import numpy
 
-from bluetooth_robot import BTRobot
+from serial_robot import SerialRobot
 from navigation import Navigator
 import time
 from typing import Callable
@@ -29,11 +29,11 @@ class BTDriver:
     SHELF_2 = 40
     SHELF_DISTANCE = 25
 
-    robot: BTRobot
+    robot: SerialRobot
     navigator: Navigator
     camera: Camera
 
-    def __init__(self, robot: BTRobot, navigator: Navigator, camera: Camera):
+    def __init__(self, robot: SerialRobot, navigator: Navigator, camera: Camera):
         self.robot = robot
         self.navigator = navigator
         self.camera = camera

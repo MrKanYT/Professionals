@@ -3,7 +3,7 @@
 import time
 import random
 
-from bluetooth_robot import BTRobot
+from serial_robot import SerialRobot
 from camera import Camera
 from navigation import Navigator
 from driver import BTDriver
@@ -49,7 +49,7 @@ def e1(driver: BTDriver):
     driver.go_to("spawn")
 
 
-def main(robot: BTRobot, camera: Camera):
+def main(robot: SerialRobot, camera: Camera):
 
     navigator = Navigator("locations/main.json")
 
@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     _camera = Camera(0)
 
-    _robot = BTRobot("COM6")
+    _robot = SerialRobot("/dev/ttyUSB0")
     
     try:
         _robot.set_led_freq(60000)

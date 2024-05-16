@@ -11,7 +11,7 @@ from multiprocessing import Value, Manager, Event
 import ctypes
 
 
-class BTRobot:
+class SerialRobot:
 
     _telemetry_len: int
 
@@ -20,13 +20,13 @@ class BTRobot:
     _shared_command: Value
     _shared_confirmations: Value
 
-    _on_bluetooth_ready: Event
+    _on_serial_ready: Event
     _on_command_sent: Event
     _on_command_completed: Event
     _on_releasing: Event
     _on_telemetry_updated: Event
 
-    _bt_io: multiprocessing.Process
+    _serial_io: multiprocessing.Process
 
     _watcher: multiprocessing.Process
     _watcher_emergency_stop_distance: Value
@@ -40,26 +40,26 @@ class BTRobot:
         self._shared_command = self._shared_memory_manager.Value(ctypes.c_char_p, "")
         self._shared_confirmations = self._shared_memory_manager.Value(ctypes.c_uint8, 1)
 
-        self._on_bluetooth_ready = Event()
+        self._on_serial_ready = Event()
         self._on_command_sent = Event()
         self._on_command_completed = Event()
         self._on_releasing = Event()
         self._on_telemetry_updated = Event()
 
-        self._bt_io = multiprocessing.Process(target=BTRobot.bluetooth_io, args=(
+        self._serial_io = multiprocessing.Process(target=SerialRobot.serial_io, args=(
             port,
             self._shared_telemetry,
             self._shared_command,
             self._shared_confirmations,
-            self._on_bluetooth_ready,
+            self._on_serial_ready,
             self._on_command_sent,
             self._on_command_completed,
             self._on_releasing,
             self._on_telemetry_updated))
 
-        self._bt_io.start()
+        self._serial_io.start()
 
-        self._on_bluetooth_ready.wait()
+        self._on_serial_ready.wait()
 
         self._watcher_status = self._shared_memory_manager.Value(ctypes.c_uint8, 0)
         self._watcher_left_correct_min = self._shared_memory_manager.Value(ctypes.c_uint16, 0)
@@ -67,7 +67,7 @@ class BTRobot:
         self._watcher_target_distance = self._shared_memory_manager.Value(ctypes.c_uint16, 0)
         self._watcher_command = self._shared_memory_manager.Value(ctypes.c_char_p, "")
 
-        self._watcher = multiprocessing.Process(target=BTRobot.watcher, args=(
+        self._watcher = multiprocessing.Process(target=SerialRobot.watcher, args=(
             self._speed,
             self._on_releasing,
             self._on_telemetry_updated,
@@ -84,47 +84,47 @@ class BTRobot:
         ))
         #self._watcher.start()
 
-        print("Robot BT ready")
+        print("Serial robot is ready")
 
     @staticmethod
-    def bluetooth_io(port: str,
-                     shared_telemetry: ShareableList,
-                     shared_command: Value,
-                     shared_confirmations: Value,
-                     on_bluetooth_ready: Event,
-                     on_command_sent: Event,
-                     on_command_completed: Event,
-                     on_releasing: Event,
-                     on_telemetry_updated: Event):
+    def serial_io(port: str,
+                  shared_telemetry: ShareableList,
+                  shared_command: Value,
+                  shared_confirmations: Value,
+                  on_serial_ready: Event,
+                  on_command_sent: Event,
+                  on_command_completed: Event,
+                  on_releasing: Event,
+                  on_telemetry_updated: Event):
         trying = 3
         while trying > 0:
             try:
-                ser = serial.Serial(port, 9600, timeout=5)
+                ser = serial.Serial(port, 115200, timeout=5)
                 break
             except SerialException:
-                print("Connecting to BT failed")
+                print("Connecting to serial failed")
             time.sleep(2)
             trying -= 1
 
         if trying <= 0:
-            print("Failed to connect to BT")
+            print("Failed to connect to serial")
             return
 
-        on_bluetooth_ready.set()
+        on_serial_ready.set()
         confirmations_left = shared_confirmations.value
         while ser.is_open:
             try:
                 bdata = ser.readline()
                 data = bdata.decode().strip()
 
-                #print(f"BT >>> {data}")
+                #print(f"SERIAL >>> {data}")
 
                 if on_releasing.is_set():
                     break
 
                 if data == "OK":
                     confirmations_left -= 1
-                    print(f"BT CONFIRMED >>> {confirmations_left} LEFT")
+                    #print(f"SERIAL CONFIRMED >>> {confirmations_left} LEFT")
                     if confirmations_left <= 0:
                         on_command_completed.set()
                         shared_confirmations.value = 1
@@ -142,7 +142,7 @@ class BTRobot:
                             on_telemetry_updated.set()
 
                 if shared_command.value:
-                    print(f"SEND BT >>> {shared_command.value}")
+                    print(f"SEND SERIAL >>> {shared_command.value}")
                     ser.write(shared_command.value.encode("ascii"))
                     #print(f"SET CONFIRMATIONS: {shared_confirmations.value}")
                     confirmations_left = shared_confirmations.value
@@ -209,7 +209,6 @@ class BTRobot:
 
                             sign = 1 if left_distance_history[-1] - left_distance_history[0] > 0 else -1
                             delta = abs(left_distance_history[-1] - left_distance_history[0])
-                            print(f"ERROR {delta}")
                             speed_correction = 0
 
                             if delta > 1.5:
@@ -224,89 +223,6 @@ class BTRobot:
                                 shared_command.value = f"V{speed_correction}"
                                 on_command_sent.wait()
                             previous_speed_correction = speed_correction
-
-
-
-
-                '''
-                if left_time == 0 and curr < 40:
-                    left_time = t
-                    left_start = curr
-                else:
-
-                    duration = t - left_time
-
-                    if duration > 8:
-                        left_time = t
-                        left_start = curr
-
-                    elif telemetry[1] < 40 and target_distance.value - (duration * speed) > 8:
-                        err = curr - left_start
-
-                        angle = 0
-                        dist = duration * speed
-
-                        error = False
-                        try:
-                            if left_correct_min.value != 0 and err < left_correct_min.value:
-                                print(f"Left time: {left_time}")
-                                print(f"Start: {left_start}; Current: {curr}; Error: {err}; Dist: {dist}")
-                                angle = math.degrees(math.asin((-err) / dist))
-
-                            elif left_correct_max.value != 0 and err > left_correct_max.value:
-                                print(f"Left time: {left_time}")
-                                print(f"Start: {left_start}; Current: {curr}; Error: {err}; Dist: {dist}")
-                                angle = -math.degrees(math.asin(err / dist))
-                        except ValueError:
-                            error = True
-
-                        if angle != 0 and not error:
-
-                            status.value = 2
-
-                            print(f"Correcting to angle {angle}")
-
-                            on_command_sent.clear()
-                            on_command_completed.clear()
-                            shared_confirms.value = 1
-                            shared_command.value = "N"
-                            on_command_sent.wait()
-
-                            time.sleep(0.5)
-
-                            on_command_sent.clear()
-                            on_command_completed.clear()
-                            shared_confirms.value = 1
-                            shared_command.value = f"R{int(round(angle))}"
-                            on_command_completed.wait(timeout=3)
-
-                            time.sleep(0.5)
-
-                            on_command_sent.clear()
-                            on_command_completed.clear()
-                            shared_confirms.value = 1
-                            shared_command.value = "N"
-                            on_command_sent.wait()
-
-                            time.sleep(0.5)
-
-                            on_command_sent.clear()
-                            on_command_completed.clear()
-                            shared_confirms.value = 1
-
-                            left_start = telemetry[1]
-
-                            if last_command.value.startswith("W"):
-                                shared_command.value = last_command.value
-                            elif target_distance.value - dist > 0:
-                                print(f"DIST LEFT: {round(target_distance.value - dist)}")
-                                shared_command.value = f"{'Fc' if last_command.value.startswith('Fc') else 'F'}{round(target_distance.value - dist) * 10}"
-                    else:
-                        status.value = 0
-                        left_time = 0
-                        left_start = 0'''
-
-
 
     @property
     def telemetry(self) -> list[int]:
@@ -339,7 +255,6 @@ class BTRobot:
 
         if await_completion:
             self._on_command_completed.wait(timeout=await_completion_timeout)
-
 
     def go(self, distance: int, correct: bool = False, *args, wall_distance: int = 0):
         print(f"Going {distance if wall_distance == 0 else 'to wall ' + str(wall_distance)} {'(correction)' if correct else ''}")
@@ -402,9 +317,9 @@ class BTRobot:
 
 
 if __name__ == "__main__":
-    robot = BTRobot("COM10")
+    robot = SerialRobot("/dev/ttyUSB0")
 
-    for i in range(8):
-        robot.rotate(180)
+    while True:
+        print(robot.forward_distance)
 
     robot.release()
