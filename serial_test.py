@@ -1,10 +1,15 @@
+import serial
 import time
 
-import serial
-
-ser = serial.Serial("COM10")
-
-while True:
-    print(ser.readline().decode("ascii"))
-
-ser.close()
+if __name__ == '__main__':
+    #ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=3)
+    ser = serial.Serial('COM5', 115200, timeout=3)
+    '''while True:
+        t = ser.readline()
+        line = t.decode('utf-8').rstrip()
+        print(line)'''
+    ser.write("R90\n".encode("ascii"))
+    while True:
+            t = ser.readline()
+            line = t.decode('ascii').rstrip()
+            print(line)

@@ -188,7 +188,7 @@ class BTDriver:
 
 
     def take_item(self, color: str):
-        self.robot.set_servo_angle(self.SERVO_LEVEL_0)
+        self.robot.set_hand_angle(self.SERVO_LEVEL_0)
 
         self.robot.open_grabber()
 
@@ -264,7 +264,7 @@ class BTDriver:
         print(f"Putting cube to the shelf {shelf}")
 
         shelf_angle = self.SHELF_1 if shelf == 1 else self.SHELF_2
-        self.robot.set_servo_angle(shelf_angle)
+        self.robot.set_hand_angle(shelf_angle)
 
         self.robot.go(0, correct=True, wall_distance=self.SHELF_DISTANCE)
 
