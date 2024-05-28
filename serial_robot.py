@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 import serial
 from serial.serialutil import SerialException
@@ -42,7 +43,7 @@ class SerialRobot:
         self._telemetry_len = 7
         self._speed = 24.7436
         self._rangefinder_direction = SerialRobot.RANGEFINDER_FORWARD
-        self._permanent_correction = -3
+        self._permanent_correction = 0
 
         self._shared_memory_manager = Manager()
         self._shared_telemetry = ShareableList([0] * self._telemetry_len)
@@ -95,7 +96,7 @@ class SerialRobot:
 
         print("Serial robot is ready")
 
-        self.switch_rangefinder(SerialRobot.RANGEFINDER_FORWARD)
+        self.switch_rangefinder(SerialRobot.RANGEFINDER_FORWARD, True)
 
     @staticmethod
     def serial_io(port: str,
@@ -189,7 +190,7 @@ class SerialRobot:
         previous_speed_correction = 0
         block_correcting = False
 
-        correction_interval = 0.2
+        correction_interval = 0.5
         buffer_size = 3
 
         while not on_releasing.is_set():
@@ -207,14 +208,15 @@ class SerialRobot:
                 last_distance = -1
             
             if is_correcting:
-                left_distance_buffer.append(telemetry[1])
+                left_distance_buffer.append(telemetry[1] / 10)
 
                 if len(left_distance_buffer) > buffer_size:
                     del left_distance_buffer[0]
 
                 time_delta = t - last_correct
                 if time_delta > correction_interval:
-                    average_left_distance = sum(left_distance_buffer) / len(left_distance_buffer)
+                    print(telemetry[1])
+                    average_left_distance = telemetry[1] / 10 #sum(left_distance_buffer) / len(left_distance_buffer)
 
                     if last_distance != -1 and last_correct != 0:
                         delta = average_left_distance - last_distance
@@ -223,16 +225,31 @@ class SerialRobot:
                         sign = 1
                         speed_correction = 0
 
-                        if abs(delta_per_second) > 1.5:
-                            sign = 1 if delta_per_second > 0 else -1
-                            speed_correction = min(abs(delta_per_second ** 1.5), 100)
+                        if True or abs(delta) > 0.5:
+                            sign = -1 if delta_per_second > 0 else 1
+                            #speed_correction = min(abs(((delta_per_second * 1) ** 2)), 200)
 
-                        speed_correction = int(speed_correction + permanent_correction) * sign
+                            if abs(delta) > 7:
+                                speed_correction = 600
+                            elif abs(delta) > 4:
+                                speed_correction = 500
+                            elif abs(delta) > 1:
+                                speed_correction = 300
+                            elif abs(delta) > 0.7:
+                                speed_correction = 200
+                            elif abs(delta) > 0.3:
+                                speed_correction = 50
+                            else:
+                                speed_correction = 0
+
+                        #print(round(delta, 2), round(delta_per_second, 2), round(speed_correction * sign, 2))
+                        speed_correction = previous_speed_correction + int(speed_correction + permanent_correction) * sign
 
                         if speed_correction != previous_speed_correction:
                             on_command_sent.clear()
                             shared_command.value = f"V{speed_correction}"
                             on_command_sent.wait()
+                            pass
                         previous_speed_correction = speed_correction
 
                     last_correct = t
@@ -248,8 +265,8 @@ class SerialRobot:
         return self._shared_telemetry[0] if self._rangefinder_direction == SerialRobot.RANGEFINDER_FORWARD else -1
 
     @property
-    def left_distance(self) -> int:
-        return self._shared_telemetry[1]
+    def left_distance(self) -> float:
+        return self._shared_telemetry[1] / 10
 
     @property
     def right_distance(self) -> int:
@@ -286,7 +303,8 @@ class SerialRobot:
             self._watcher_target_distance.value = distance
             self._watcher_command.value = cmd
 
-        self.send_command(f"V{int(self._permanent_correction)}")
+        if self._permanent_correction != 0:
+            self.send_command(f"V{int(self._permanent_correction)}")
         self.send_command(cmd, await_completion=True, required_confirmations=1)
 
         while self._watcher_status.value == 2:
@@ -308,12 +326,12 @@ class SerialRobot:
         self.send_command("N")
 
     def close_grabber(self):
-        self.send_command("H2", await_completion=False, required_confirmations=1)
-        time.sleep(4)
+        self.send_command("H0", await_completion=True, required_confirmations=1)
+        #time.sleep(4)
 
     def open_grabber(self):
-        self.send_command("H0", await_completion=False, required_confirmations=1)
-        time.sleep(4)
+        self.send_command("H2", await_completion=True, required_confirmations=1)
+        #time.sleep(4)
 
     def set_red_led(self, status: bool):
         self.send_command(f"G{int(status)}")
@@ -327,19 +345,20 @@ class SerialRobot:
     def set_hand_angle(self, degrees: int):
         self.send_command(f"S{degrees}", await_completion=True)
 
-    def switch_rangefinder(self, direction: int):
+    def switch_rangefinder(self, direction: int, force: bool = False):
         """
         Поворачивает ультразвуковой дальномер
         :param direction: 0 - прямо, 1 - направо
+        :param force: если True, то команда отправится даже если положения совпадают
         """
-        if self._rangefinder_direction == direction:
+        if not force and self._rangefinder_direction == direction:
             return
 
         angle = SerialRobot._RANGEFINDER_ANGLES[direction]
         self._rangefinder_direction = direction
         self.send_command(f"Y{angle}")
 
-        time.sleep(1)   # подтверждение выполнения на эту команду не работает, поэтому просто задержкой
+        time.sleep(0.8)   # подтверждение выполнения на эту команду не работает, поэтому просто задержкой
 
     def release(self):
         #self.set_hand_angle(129)
@@ -350,7 +369,7 @@ class SerialRobot:
 if __name__ == "__main__":
     robot = SerialRobot("/dev/ttyAMA0")
 
-    robot.go(90, correct=True)
+    robot.go(0, wall_distance=20, correct=True)
 
     robot.release()
     exit()
