@@ -188,10 +188,12 @@ class SerialRobot:
         last_correct = 0
         last_distance = -1
         previous_speed_correction = 0
-        block_correcting = False
 
-        correction_interval = 0.5
-        buffer_size = 3
+        correction_interval = 0.1
+        buffer_size = 10
+        target_distance = 24
+        p_mult = 250
+        d_mult = 100
 
         while not on_releasing.is_set():
             on_telemetry_updated.wait()
@@ -208,52 +210,36 @@ class SerialRobot:
                 last_distance = -1
             
             if is_correcting:
-                left_distance_buffer.append(telemetry[1] / 10)
-
-                if len(left_distance_buffer) > buffer_size:
-                    del left_distance_buffer[0]
-
                 time_delta = t - last_correct
-                if time_delta > correction_interval:
-                    print(telemetry[1])
-                    average_left_distance = telemetry[1] / 10 #sum(left_distance_buffer) / len(left_distance_buffer)
+                if time_delta >= correction_interval:
+                    average_left_distance = telemetry[1] / 10
+                    distance_error = target_distance - average_left_distance
 
-                    if last_distance != -1 and last_correct != 0:
-                        delta = average_left_distance - last_distance
-                        delta_per_second = delta / time_delta
+                    left_distance_buffer.append(distance_error)
 
-                        sign = 1
-                        speed_correction = 0
+                    if len(left_distance_buffer) > buffer_size:
+                        del left_distance_buffer[0]
 
-                        if True or abs(delta) > 0.5:
-                            sign = -1 if delta_per_second > 0 else 1
-                            #speed_correction = min(abs(((delta_per_second * 1) ** 2)), 200)
+                    if len(left_distance_buffer) >= buffer_size:
+                        if last_distance != -1 and last_correct != 0:
+                            p_sign = 1
+                            d_sign = 1
 
-                            if abs(delta) > 7:
-                                speed_correction = 600
-                            elif abs(delta) > 4:
-                                speed_correction = 500
-                            elif abs(delta) > 1:
-                                speed_correction = 300
-                            elif abs(delta) > 0.7:
-                                speed_correction = 200
-                            elif abs(delta) > 0.3:
-                                speed_correction = 50
-                            else:
-                                speed_correction = 0
+                            d_error = (left_distance_buffer[-1] - left_distance_buffer[0]) * d_mult * d_sign
+                            p_error = distance_error * p_mult * p_sign
 
-                        #print(round(delta, 2), round(delta_per_second, 2), round(speed_correction * sign, 2))
-                        speed_correction = previous_speed_correction + int(speed_correction + permanent_correction) * sign
+                            speed_correction = p_error + d_error
+                            print("Correction", target_distance - average_left_distance, speed_correction)
 
-                        if speed_correction != previous_speed_correction:
-                            on_command_sent.clear()
-                            shared_command.value = f"V{speed_correction}"
-                            on_command_sent.wait()
-                            pass
-                        previous_speed_correction = speed_correction
+                            if speed_correction != previous_speed_correction:
+                                on_command_sent.clear()
+                                shared_command.value = f"V{int(speed_correction)}"
+                                on_command_sent.wait()
 
-                    last_correct = t
-                    last_distance = average_left_distance
+                            previous_speed_correction = speed_correction
+
+                        last_correct = t
+                        last_distance = average_left_distance
 
 
     @property
