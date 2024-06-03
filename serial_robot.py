@@ -96,8 +96,6 @@ class SerialRobot:
 
         print("Serial robot is ready")
 
-        self.switch_rangefinder(SerialRobot.RANGEFINDER_FORWARD, True)
-
     @staticmethod
     def serial_io(port: str,
                   shared_telemetry: ShareableList,
@@ -124,6 +122,7 @@ class SerialRobot:
 
         on_serial_ready.set()
         confirmations_left = shared_confirmations.value
+        waiting_for_sending = ""
         while ser.is_open:
             try:
                 bdata = ser.readline()
@@ -140,6 +139,13 @@ class SerialRobot:
                     if confirmations_left <= 0:
                         on_command_completed.set()
                         shared_confirmations.value = 1
+                elif data.startswith("+"):
+                    print(f"SEND SERIAL CONFIRMED >>> {data}")
+                    if data[1:].strip() == waiting_for_sending:
+                        on_command_sent.set()
+                        waiting_for_sending = ""
+                    else:
+                        shared_command.value = waiting_for_sending
                 else:
                     splitted = data.split(" ")
                     if any(splitted):
@@ -155,11 +161,11 @@ class SerialRobot:
 
                 if shared_command.value:
                     print(f"SEND SERIAL >>> {shared_command.value}")
+                    waiting_for_sending = shared_command.value
                     ser.write(shared_command.value.encode("ascii"))
                     #print(f"SET CONFIRMATIONS: {shared_confirmations.value}")
                     confirmations_left = shared_confirmations.value
                     shared_command.value = ""
-                    on_command_sent.set()
             except KeyboardInterrupt:
                 break
 
@@ -306,7 +312,11 @@ class SerialRobot:
     def rotate(self, degrees: int, wait: bool = True):
         print(f"Rotating: {degrees}")
 
-        self.send_command(f"R{degrees}", await_completion=wait, required_confirmations=1)
+        timeout = 20
+        if degrees < 10:
+            timeout = 1
+
+        self.send_command(f"R{degrees}", await_completion=wait, required_confirmations=1, await_completion_timeout=timeout)
 
     def reset_position(self):
         self.send_command("N")

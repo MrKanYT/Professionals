@@ -22,8 +22,8 @@ class BTDriver:
     }
     COMMAND_ARGS_SEPARATOR = ","
 
-    SERVO_LEVEL_0 = 105
-    SERVO_LEVEL_0_1 = 90
+    HAND_DEFAULT_ANGLE = 125
+    HAND_ITEM_LEVEL = 125
 
     SHELF_1 = 92
     SHELF_2 = 40
@@ -188,7 +188,7 @@ class BTDriver:
 
 
     def take_item(self, color: str):
-        self.robot.set_hand_angle(self.SERVO_LEVEL_0)
+        self.robot.set_hand_angle(self.HAND_ITEM_LEVEL)
 
         self.robot.open_grabber()
 
@@ -220,10 +220,10 @@ class BTDriver:
                 dist_delta = grabber_center[1] - cy
 
                 if rot_delta > 10:
-                    self.robot.rotate(-2)
+                    self.robot.rotate(-3)
                     continue
                 elif rot_delta < -10:
-                    self.robot.rotate(2)
+                    self.robot.rotate(3)
                     continue
 
                 
@@ -248,14 +248,12 @@ class BTDriver:
 
             time.sleep(0.05)
 
-        print("Close grabber")
         self.robot.close_grabber()
 
-        print("Closed grabber")
         self.camera.draw_object_pos(None)
         self.camera.draw_grabber_pos(None)
         time.sleep(1)
-        #self.robot.set_servo_angle(self.SERVO_LEVEL_0_1)
+        self.robot.set_hand_angle(self.HAND_DEFAULT_ANGLE)
         self.robot.go(-15)
 
         time.sleep(1)

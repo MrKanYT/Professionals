@@ -101,12 +101,12 @@ class Camera:
 
             if display:
                 if grabber_x.value > 0 and graber_y.value > 0:
-                    decoded = cv2.rectangle(image, (grabber_x.value - 5, graber_y.value - 5), (grabber_x.value + 5, graber_y.value + 5), (255, 255, 0), 2)
+                    image = cv2.rectangle(image, (grabber_x.value - 5, graber_y.value - 5), (grabber_x.value + 5, graber_y.value + 5), (255, 255, 0), 2)
 
                 if object_x.value > 0 and object_y.value > 0:
-                    decoded = cv2.rectangle(image, (object_x.value - 5, object_y.value - 5), (object_x.value + 5, object_y.value + 5), (255, 0, 255), 2)
+                    image = cv2.rectangle(image, (object_x.value - 5, object_y.value - 5), (object_x.value + 5, object_y.value + 5), (255, 0, 255), 2)
 
-                decoded = cv2.putText(image, text.value, (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
+                image = cv2.putText(image, text.value, (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
 
                 cv2.imshow("Robot", image)
                 cv2.waitKey(1)
@@ -156,7 +156,7 @@ def test():
         camera.draw_grabber_pos((grabber_x, grabber_y))
 
         cube_find_area = grab_helper.get_area(image.shape[1], image.shape[0], grab_helper.CUBE_FIND_AREA)
-        cube_x, cube_y, rotated = grab_helper.find_cube(image_hsv, cube_find_area, "blue")
+        cube_x, cube_y, rotated = grab_helper.find_cube(image_hsv, cube_find_area, "green")
 
         if None not in (cube_x, cube_y, rotated):
             camera.draw_object_pos((cube_x, cube_y))

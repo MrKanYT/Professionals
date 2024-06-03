@@ -51,23 +51,30 @@ def e1(driver: BTDriver):
 
 def main(robot: SerialRobot, camera: Camera):
 
-    navigator = Navigator("locations/main.json")
+    navigator = Navigator("locations/test_loc.json")
 
-    driver = BTDriver(robot, navigator, camera)
+    #driver = BTDriver(robot, navigator, camera)
+    #robot.set_hand_angle(125)
+    #time.sleep(4)
+    #driver.take_item("green")
 
-    e1(driver)
+    #robot.go(30)
+
+    #robot.open_grabber()
 
 
 if __name__ == "__main__":
 
     _camera = Camera(0)
 
-    _robot = SerialRobot("/dev/ttyUSB0")
+    _robot = SerialRobot("/dev/ttyAMA0")
     
     try:
         _robot.set_led_freq(60000)
         _robot.set_red_led(True)
         _robot.set_green_led(True)
+        _robot.set_hand_angle(BTDriver.HAND_DEFAULT_ANGLE)
+        _robot.switch_rangefinder(SerialRobot.RANGEFINDER_FORWARD, True)
 
         main(_robot, _camera)
 
