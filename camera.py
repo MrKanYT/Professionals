@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 
 import multiprocessing
-from multiprocessing.shared_memory import SharedMemory
+from multiprocessing.shared_memory import SharedMemory, ShareableList
 from multiprocessing import Value, Manager
 import ctypes
 
@@ -16,9 +16,10 @@ class Camera:
     image_size: tuple[int, int, int]
     camera_index: int
 
-    def __init__(self, camera_index: int):
+    def __init__(self, camera_index: int, shared_telemetry: ShareableList | None):
 
         self.camera_index = camera_index
+        self._shared_telemetry = shared_telemetry
 
         tmp_capture = cv2.VideoCapture(0)
         if not tmp_capture.isOpened():
@@ -60,7 +61,9 @@ class Camera:
             self._shared_grabber_y,
             self._shared_object_x,
             self._shared_object_y,
-            self._shared_text
+            self._shared_text,
+            self._shared_telemetry
+
         ))
         self._child_process.start()
 
@@ -75,7 +78,8 @@ class Camera:
                        graber_y: Value,
                        object_x: Value,
                        object_y: Value,
-                       text: Value):
+                       text: Value,
+                       telemetry: ShareableList):
 
         capture = cv2.VideoCapture(camera_index)
         if not capture.isOpened():
@@ -106,7 +110,14 @@ class Camera:
                 if object_x.value > 0 and object_y.value > 0:
                     image = cv2.rectangle(image, (object_x.value - 5, object_y.value - 5), (object_x.value + 5, object_y.value + 5), (255, 0, 255), 2)
 
-                image = cv2.putText(image, text.value, (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
+                image = cv2.putText(image,"Тест", (5, image.shape[0] - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1, bottomLeftOrigin=True)
+
+                if telemetry is not None:
+                    image = cv2.putText(image, f"Дальномеры: {telemetry[0]} {telemetry[1]}",
+                                        (5, 25), cv2.FONT_HERSHEY_COMPLEX, 0.8, (255, 255, 0), 1)
+                    image = cv2.putText(image, f"Рука: {telemetry[5]}",
+                                        (5, 55), cv2.FONT_HERSHEY_COMPLEX, 0.8, (255, 255, 0), 1)
 
                 cv2.imshow("Robot", image)
                 cv2.waitKey(1)

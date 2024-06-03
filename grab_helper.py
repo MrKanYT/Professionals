@@ -41,7 +41,7 @@ def get_area(img_size_x: int, img_size_y: int, relative_size: tuple[tuple[float,
 
 
 def find_grabber_center(image_hsv: cv2.UMat, area: tuple[tuple[int, int], tuple[int, int]]) -> tuple[int, int]:
-    return 247, 294
+    return 245, 400
     image_hsv = image_hsv[area[1][0]:area[1][1], area[0][0]:area[0][1]]
 
     mask = cv2.inRange(image_hsv, GRABBER_COLOR_0_MIN, GRABBER_COLOR_0_MAX) + cv2.inRange(image_hsv, GRABBER_COLOR_1_MIN, GRABBER_COLOR_1_MAX)

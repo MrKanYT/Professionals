@@ -128,14 +128,14 @@ class SerialRobot:
                 bdata = ser.readline()
                 data = bdata.decode().strip()
 
-                #print(f"SERIAL >>> {data}")
+                print(f"SERIAL >>> {data}")
 
                 if on_releasing.is_set():
                     break
 
                 if data == "OK":
                     confirmations_left -= 1
-                    #print(f"SERIAL CONFIRMED >>> {confirmations_left} LEFT")
+                    print(f"SERIAL CONFIRMED >>> {confirmations_left} LEFT")
                     if confirmations_left <= 0:
                         on_command_completed.set()
                         shared_confirmations.value = 1
@@ -200,6 +200,8 @@ class SerialRobot:
         target_distance = 24
         p_mult = 250
         d_mult = 100
+        found_wall = False
+        found_wall_counter = 0
 
         while not on_releasing.is_set():
             on_telemetry_updated.wait()
@@ -214,38 +216,47 @@ class SerialRobot:
                 previous_speed_correction = 0
                 last_correct = 0
                 last_distance = -1
+                found_wall = False
+                found_wall_counter = 0
             
             if is_correcting:
                 time_delta = t - last_correct
                 if time_delta >= correction_interval:
                     average_left_distance = telemetry[1] / 10
+                    if average_left_distance < 60:
+                        found_wall_counter += 1
+                        found_wall = found_wall or found_wall_counter > 3
+                    else:
+                        found_wall_counter = 0
+
                     distance_error = target_distance - average_left_distance
 
-                    left_distance_buffer.append(distance_error)
+                    if found_wall:
+                        left_distance_buffer.append(distance_error)
 
-                    if len(left_distance_buffer) > buffer_size:
-                        del left_distance_buffer[0]
+                        if len(left_distance_buffer) > buffer_size:
+                            del left_distance_buffer[0]
 
-                    if len(left_distance_buffer) >= buffer_size:
-                        if last_distance != -1 and last_correct != 0:
-                            p_sign = 1
-                            d_sign = 1
+                        if len(left_distance_buffer) >= buffer_size :
+                            if last_distance != -1 and last_correct != 0:
+                                p_sign = 1
+                                d_sign = 1
 
-                            d_error = (left_distance_buffer[-1] - left_distance_buffer[0]) * d_mult * d_sign
-                            p_error = distance_error * p_mult * p_sign
+                                d_error = (left_distance_buffer[-1] - left_distance_buffer[0]) * d_mult * d_sign
+                                p_error = distance_error * p_mult * p_sign
 
-                            speed_correction = p_error + d_error
-                            print("Correction", target_distance - average_left_distance, speed_correction)
+                                speed_correction = p_error + d_error
+                                print("Correction", target_distance - average_left_distance, speed_correction)
 
-                            if speed_correction != previous_speed_correction:
-                                on_command_sent.clear()
-                                shared_command.value = f"V{int(speed_correction)}"
-                                on_command_sent.wait()
+                                if speed_correction != previous_speed_correction:
+                                    on_command_sent.clear()
+                                    shared_command.value = f"V{int(speed_correction)}"
+                                    on_command_sent.wait()
 
-                            previous_speed_correction = speed_correction
+                                previous_speed_correction = speed_correction
 
-                        last_correct = t
-                        last_distance = average_left_distance
+                            last_correct = t
+                            last_distance = average_left_distance
 
 
     @property
@@ -263,6 +274,10 @@ class SerialRobot:
     @property
     def right_distance(self) -> int:
         return self._shared_telemetry[0] if self._rangefinder_direction == SerialRobot.RANGEFINDER_RIGHT else -1
+
+    @property
+    def hand_angle(self) -> int:
+        return self._shared_telemetry[5]
 
     def send_command(self, command: str,
                      await_sending: bool = True,
@@ -313,7 +328,7 @@ class SerialRobot:
         print(f"Rotating: {degrees}")
 
         timeout = 20
-        if degrees < 10:
+        if abs(degrees) < 10:
             timeout = 1
 
         self.send_command(f"R{degrees}", await_completion=wait, required_confirmations=1, await_completion_timeout=timeout)
@@ -339,7 +354,7 @@ class SerialRobot:
         self.send_command(f"Q{millis}")
 
     def set_hand_angle(self, degrees: int):
-        self.send_command(f"S{degrees}", await_completion=True)
+        self.send_command(f"S{degrees}", await_completion=self.hand_angle != degrees)    # OK не приходит, если отправлен тот же угол
 
     def switch_rangefinder(self, direction: int, force: bool = False):
         """
@@ -357,7 +372,7 @@ class SerialRobot:
         time.sleep(0.8)   # подтверждение выполнения на эту команду не работает, поэтому просто задержкой
 
     def release(self):
-        #self.set_hand_angle(129)
+        self.set_hand_angle(125)
         self.reset_position()
         self._on_releasing.set()
 
@@ -365,6 +380,7 @@ class SerialRobot:
 if __name__ == "__main__":
     robot = SerialRobot("/dev/ttyAMA0")
 
+    robot.set_hand_angle(125)
     robot.go(0, wall_distance=20, correct=True)
 
     robot.release()

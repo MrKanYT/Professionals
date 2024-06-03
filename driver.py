@@ -23,7 +23,8 @@ class BTDriver:
     COMMAND_ARGS_SEPARATOR = ","
 
     HAND_DEFAULT_ANGLE = 125
-    HAND_ITEM_LEVEL = 125
+    HAND_ITEM_LEVEL = 131
+    HAND_TRANSPORTING_ANGLE = 110
 
     SHELF_1 = 92
     SHELF_2 = 40
@@ -253,7 +254,7 @@ class BTDriver:
         self.camera.draw_object_pos(None)
         self.camera.draw_grabber_pos(None)
         time.sleep(1)
-        self.robot.set_hand_angle(self.HAND_DEFAULT_ANGLE)
+        self.robot.set_hand_angle(self.HAND_TRANSPORTING_ANGLE)
         self.robot.go(-15)
 
         time.sleep(1)

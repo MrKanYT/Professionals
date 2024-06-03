@@ -53,21 +53,24 @@ def main(robot: SerialRobot, camera: Camera):
 
     navigator = Navigator("locations/test_loc.json")
 
-    #driver = BTDriver(robot, navigator, camera)
-    #robot.set_hand_angle(125)
-    #time.sleep(4)
+    driver = BTDriver(robot, navigator, camera)
+
+    #robot.set_hand_angle(BTDriver.HAND_ITEM_LEVEL)
+    #robot.go(50)
+
     #driver.take_item("green")
 
     #robot.go(30)
 
     #robot.open_grabber()
+    time.sleep(10)
 
 
 if __name__ == "__main__":
 
-    _camera = Camera(0)
-
     _robot = SerialRobot("/dev/ttyAMA0")
+
+    _camera = Camera(0, _robot._shared_telemetry)
     
     try:
         _robot.set_led_freq(60000)
