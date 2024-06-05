@@ -110,8 +110,8 @@ class Camera:
                 if object_x.value > 0 and object_y.value > 0:
                     image = cv2.rectangle(image, (object_x.value - 5, object_y.value - 5), (object_x.value + 5, object_y.value + 5), (255, 0, 255), 2)
 
-                image = cv2.putText(image,"Тест", (5, image.shape[0] - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1, bottomLeftOrigin=True)
+                image = cv2.putText(image, text.value, (5, image.shape[0] - 25),
+                                    cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 0), 1)
 
                 if telemetry is not None:
                     image = cv2.putText(image, f"Дальномеры: {telemetry[0]} {telemetry[1]}",
@@ -153,7 +153,7 @@ class Camera:
 
 
 def test():
-    camera = Camera(0)
+    camera = Camera(0, None)
 
     import grab_helper
 
@@ -168,6 +168,7 @@ def test():
 
         cube_find_area = grab_helper.get_area(image.shape[1], image.shape[0], grab_helper.CUBE_FIND_AREA)
         cube_x, cube_y, rotated = grab_helper.find_cube(image_hsv, cube_find_area, "green")
+        camera.set_text(f"{cube_x} {cube_y}")
 
         if None not in (cube_x, cube_y, rotated):
             camera.draw_object_pos((cube_x, cube_y))

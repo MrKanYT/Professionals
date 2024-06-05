@@ -197,7 +197,7 @@ class SerialRobot:
 
         correction_interval = 0.1
         buffer_size = 10
-        target_distance = 24
+        target_distance = 16
         p_mult = 250
         d_mult = 100
         found_wall = False
@@ -371,6 +371,9 @@ class SerialRobot:
 
         time.sleep(0.8)   # подтверждение выполнения на эту команду не работает, поэтому просто задержкой
 
+    def set_light(self, enabled: bool):
+        self.send_command(f"B{int(enabled)}")
+
     def release(self):
         self.set_hand_angle(125)
         self.reset_position()
@@ -380,8 +383,7 @@ class SerialRobot:
 if __name__ == "__main__":
     robot = SerialRobot("/dev/ttyAMA0")
 
-    robot.set_hand_angle(125)
-    robot.go(0, wall_distance=20, correct=True)
+    robot.set_hand_angle(117)
 
-    robot.release()
+    #robot.release()
     exit()

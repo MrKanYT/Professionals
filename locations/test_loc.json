@@ -7,13 +7,19 @@
       "path_from": "R180 F40 R-90"
     },
     {
-      "path_to": "F130",
+      "path_to": "Wc20",
       "path_from": "R180 F130 R180",
       "children": [
         {
           "name": "cube0",
-          "path_to": "R90 F100",
-          "path_from": "R180 F100 R90"
+          "path_to": "R90 F10",
+          "path_from": "R180 F100 R90",
+          "children": [
+            {
+              "name": "finish",
+              "path_to": "F-28 R90 F60 Wc45"
+            }
+          ]
         },
         {
           "name": "cube1",

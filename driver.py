@@ -23,8 +23,8 @@ class BTDriver:
     COMMAND_ARGS_SEPARATOR = ","
 
     HAND_DEFAULT_ANGLE = 125
-    HAND_ITEM_LEVEL = 131
-    HAND_TRANSPORTING_ANGLE = 110
+    HAND_ITEM_LEVEL = 110
+    HAND_TRANSPORTING_ANGLE = 70
 
     SHELF_1 = 92
     SHELF_2 = 40
@@ -131,7 +131,7 @@ class BTDriver:
         print(f"EXECUTE MANY: {commands}")
         merged = BTDriver._merge_rot_commands(commands)
         print(f"MERGED ROT: {merged}")
-        merged = BTDriver._merge_wall_commands(merged)
+        #merged = BTDriver._merge_wall_commands(merged)
         print(f"EXECUTE WALL: {merged}")
         for cmd in merged:
             self.execute(cmd)
@@ -190,6 +190,7 @@ class BTDriver:
 
     def take_item(self, color: str):
         self.robot.set_hand_angle(self.HAND_ITEM_LEVEL)
+        self.robot.set_light(True)
 
         self.robot.open_grabber()
 
@@ -215,17 +216,39 @@ class BTDriver:
 
             if None not in (cx, cy, rot):
                 not_found = 10
+
                 self.camera.draw_object_pos((cx, cy))
 
                 rot_delta = grabber_center[0] - cx
                 dist_delta = grabber_center[1] - cy
-
-                if rot_delta > 10:
-                    self.robot.rotate(-3)
-                    continue
-                elif rot_delta < -10:
-                    self.robot.rotate(3)
-                    continue
+                self.camera.set_text(f"{rot_delta} {dist_delta}")
+                if dist_delta < 100:
+                    if rot_delta > 15:
+                        self.robot.rotate(-2)
+                        #time.sleep(0.5)
+                        continue
+                    elif rot_delta < -15:
+                        self.robot.rotate(2)
+                        #time.sleep(0.5)
+                        continue
+                elif dist_delta < 200:
+                    if rot_delta > 25:
+                        self.robot.rotate(-3)
+                        #time.sleep(0.5)
+                        continue
+                    elif rot_delta < -25:
+                        self.robot.rotate(3)
+                        #time.sleep(0.5)
+                        continue
+                else:
+                    if rot_delta > 50:
+                        self.robot.rotate(-4)
+                        #time.sleep(0.5)
+                        continue
+                    elif rot_delta < -50:
+                        self.robot.rotate(4)
+                        #time.sleep(0.5)
+                        continue
 
                 
                 if dist_delta > 300:
@@ -251,13 +274,16 @@ class BTDriver:
 
         self.robot.close_grabber()
 
+        self.robot.set_light(False)
+
         self.camera.draw_object_pos(None)
         self.camera.draw_grabber_pos(None)
         time.sleep(1)
-        self.robot.set_hand_angle(self.HAND_TRANSPORTING_ANGLE)
         self.robot.go(-15)
 
         time.sleep(1)
+
+        self.robot.set_hand_angle(self.HAND_TRANSPORTING_ANGLE)
 
     def put(self, shelf: int):
         print(f"Putting cube to the shelf {shelf}")

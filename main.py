@@ -55,14 +55,16 @@ def main(robot: SerialRobot, camera: Camera):
 
     driver = BTDriver(robot, navigator, camera)
 
-    #robot.set_hand_angle(BTDriver.HAND_ITEM_LEVEL)
-    #robot.go(50)
+    driver.go_to("cube0")
 
-    #driver.take_item("green")
+    driver.take_item("green")
 
-    #robot.go(30)
+    driver.go_to("finish")
 
-    #robot.open_grabber()
+    robot.set_hand_angle(driver.HAND_ITEM_LEVEL)
+
+    robot.open_grabber()
+
     time.sleep(10)
 
 

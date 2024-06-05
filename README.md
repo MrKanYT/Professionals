@@ -1,11 +1,11 @@
 # RPI OS
-## Bluetooth и Serial порт
+## Bluetooth Рё Serial РїРѕСЂС‚
 
-На роботе отключен BT для лучшего функционирования Serial порта в GPIO (https://www.abelectronics.co.uk/kb/article/1035/serial-port-setup-in-raspberry-pi-os, раздел "Notes for the Raspberry Pi 3 Model B, B+, 4 and Raspberry Pi Zero W")
+РќР° СЂРѕР±РѕС‚Рµ РѕС‚РєР»СЋС‡РµРЅ BT РґР»СЏ Р»СѓС‡С€РµРіРѕ С„СѓРЅРєС†РёРѕРЅРёСЂРѕРІР°РЅРёСЏ Serial РїРѕСЂС‚Р° РІ GPIO (https://www.abelectronics.co.uk/kb/article/1035/serial-port-setup-in-raspberry-pi-os, СЂР°Р·РґРµР» "Notes for the Raspberry Pi 3 Model B, B+, 4 and Raspberry Pi Zero W")
 
-Для включения:
+Р”Р»СЏ РІРєР»СЋС‡РµРЅРёСЏ:
 - `sudo nano /boot/firmware/config.txt`
-- удалить в конце `dtoverlay=disable-bt` и сохранить
+- СѓРґР°Р»РёС‚СЊ РІ РєРѕРЅС†Рµ `dtoverlay=disable-bt` Рё СЃРѕС…СЂР°РЅРёС‚СЊ
 - `sudo systemctl enable hciuart`
 - `sudo reboot`
 

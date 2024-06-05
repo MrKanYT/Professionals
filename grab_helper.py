@@ -30,7 +30,7 @@ COLORS = {
     "yellow": ((20, 125, 80), (33, 255, 255)),
     "blue": ((75, 80, 45), (115, 255, 255)),
     "black": ((0, 0, 0), (180, 110, 40)),
-    "green": ((30, 80, 45), (90, 255, 255))
+    "green": ((30, 80, 70), (90, 255, 255))
 }
 
 
@@ -41,7 +41,7 @@ def get_area(img_size_x: int, img_size_y: int, relative_size: tuple[tuple[float,
 
 
 def find_grabber_center(image_hsv: cv2.UMat, area: tuple[tuple[int, int], tuple[int, int]]) -> tuple[int, int]:
-    return 245, 400
+    return 303, 378
     image_hsv = image_hsv[area[1][0]:area[1][1], area[0][0]:area[0][1]]
 
     mask = cv2.inRange(image_hsv, GRABBER_COLOR_0_MIN, GRABBER_COLOR_0_MAX) + cv2.inRange(image_hsv, GRABBER_COLOR_1_MIN, GRABBER_COLOR_1_MAX)
@@ -72,7 +72,7 @@ def find_cube(image_hsv: cv2.UMat, area: tuple[tuple[int, int]], color: str) -> 
     clr = COLORS[color]
 
     mask = cv2.inRange(image_hsv, clr[0], clr[1])
-    #cv2.imshow("Mask", mask)
+    cv2.imshow("Mask", mask)
 
     biggest_area = 0
     biggest = None
